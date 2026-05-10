@@ -1,0 +1,35 @@
+1. “答题卡_分数识别错误或忽略”的N列“负责人”是空的，检查原因并修改
+
+2. “答题卡_AI_错误次数≥3”的Z列“负责人”是空的，检查原因并修改。链接共有7行如下：
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65603/464870/3
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65606/464879/3
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65613/464898/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65620/464920/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65621/464923/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65625/464936/3
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65660/465041/3
+应该是13条，如下：
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65603/464870/3
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65606/464879/3
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65613/464898/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65620/464920/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65621/464923/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65625/464936/3
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65629/464948/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65635/464965/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65649/465006/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65653/465018/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65660/465041/3
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65665/465054/1
+https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/cardPage/65665/465056/1
+原因好像是二次筛选：不同「链接」中，同一个「大题ID」出现 ≥ 3 个，才保留
+改成了：同一个「大题ID」出现 ≥ 3 个，保留。去掉了“不同「链接」”的条件。
+以13条结果为准，检查原因并修改。
+
+3. 界面修改，参考 NewApp/新界面.txt，右半部分的文字需要左对齐，箭头也要对齐
+
+4. 已经增加 NewApp/data 用来测试，用来“拼链接”的2个excel合二为一，变成1个excel的2个sheet，此时“拼链接”
+的数据不对，仅生成了一个链接。需要修改，兼容这种2合1的情况。
+
+5. 运行app，出现“正在扫描 data 文件夹...”，然后等了好长时间，才出现后面的内容，是否能加速，越快越好。
+

@@ -1,0 +1,68 @@
+# Check_App (check.app) - Agent Documentation
+
+## Project Overview
+`check.app` is a MacOS desktop application built with Python. Its primary purpose is to automate the downloading and processing of evaluation task data (Excel files) for weekly quality checks. It generates a comprehensive `result.xlsx` report highlighting various errors, bad cases, and statistics for different task types.
+
+## Tech Stack
+- **Core Logic**: Python (`check_main.py`)
+- **Excel Processing**: `openpyxl`
+- **Browser Automation**: Playwright (connecting to the local Google Chrome profile for authentication state)
+- **Packaging**: PyInstaller (packaged as a `.app` MacOS application)
+
+## Architecture & Workflow
+The application operates in a multi-stage workflow:
+
+1. **Initialization & Base Data Scanning**: 
+   - Reads base assignment files (e.g., `答+周.xlsx`, `寒假.xlsx`) placed by the user in the `data/` directory.
+   - Identifies files via column headers (e.g., matching the "负责人" column).
+   - Generates a "拼链接" sheet containing constructed URLs for data downloading.
+
+2. **Automated Data Downloading**:
+   - Uses Playwright to connect to a local Chrome profile (`~/.gemini/NewApp_chrome_profile`) to bypass login requirements.
+   - Navigates to the constructed links on `mapi.yuanfudao.com`.
+   - Simulates clicks to download detailed evaluation data files (`AI.xlsx`, `分数.xlsx`, `答题卡-AI.xlsx`, `答题卡-分数.xlsx`) into the `data/` folder.
+
+3. **Data Transformation & Reporting (`result.xlsx`)**:
+   - Matches the downloaded data with base assignment data to assign owners ("负责人").
+   - Filters, deduplicates, and formats data into specific sheets based on precise business rules:
+     - **Sheet 1**: 拼链接
+     - **Sheet 2**: 分数识别错误或忽略
+     - **Sheet 3**: 固定批改错误或忽略
+     - **Sheet 4**: 题目框错误+忽略超过3个
+     - **Sheet 5**: BadCase
+     - **Sheet 6**: 答题卡_分数识别错误或忽略
+     - **Sheet 7**: 答题卡_AI_BadCase
+     - **Sheet 8**: 答题卡_AI_错误次数≥3（星标参考）
+     - **Sheet 9**: AI_错误次数≥3（星标参考）
+   - Applies specific Excel formatting (e.g., column widths, cell background colors like yellow for headers and gray/green for visual grouping).
+
+4. **File Normalization**:
+   - Automatically detects misnamed Excel files in `data/` by inspecting their headers and renames them to standard names (e.g., `AI.xlsx`).
+
+5. **Terminal UI**:
+   - The app outputs real-time scanning, downloading, and generation progress to the terminal, and keeps the terminal window open upon completion for user verification.
+
+## Core Files & Directories
+- `check_main.py`: The entry point and main logic file. Contains all scanning, Playwright automation, and Excel generation code.
+- `check.app/`: The final MacOS application bundle. The executable logic resides at `check.app/Contents/Resources/check_main`.
+- `data/`: The working directory for input and intermediate Excel files.
+- `result.xlsx`: The final generated output report.
+- `需求文档.txt`, `修改*.txt`, `新界面*.txt`: Product Requirements Documents (PRD) and modification history dictating the business logic for each sheet.
+
+## Guidelines for AI Agents
+
+1. **Modifying Sheet Logic**:
+   - Simple sheets are typically generated using the `generic_build` function in `check_main.py`.
+   - Complex sheets (like BadCase, AI_错误次数≥3) have custom procedural logic in the `main()` function. 
+   - When modifying logic, ensure you strictly follow the column matching by name (using the `col()` function) rather than hardcoded indices, as the column positions in the source files are subject to change.
+
+2. **Playwright Automation**:
+   - The Playwright script (`auto_download_files`) relies on specific DOM elements (e.g., `button:has-text('导出Excel')`). If the upstream website updates its UI, these locators will need adjustment.
+   - Playwright uses a local Chrome context to preserve login cookies. Avoid headless operations if they break the auth state.
+
+3. **Packaging Updates**:
+   - If you make changes to `check_main.py` or `check_headers_final.py`, the changes will not be reflected in `check.app` until it is repackaged using PyInstaller.
+
+4. **Formatting Constraints**:
+   - Ensure the terminal output strictly aligns with the PRD (using `pad_display` for precise UI alignment).
+   - Do **not** write any log files (e.g., `app.log`) to the disk, as per the user's explicit requirement in the PRD.

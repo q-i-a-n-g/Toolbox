@@ -1,0 +1,31 @@
+1. 把ffmpeg / pdfcpu一起打包进 App，它们在本机的位置：
+    - `ffmpeg`：/usr/local/bin/ffmpeg
+    - `pdfcpu`：/usr/local/bin/pdfcpu
+2. 已经用xcode打开，运行报错如下，需要改成适用于mac os 13.0的：
+    - Use of unknown directive '#Preview'：
+    #Preview {
+        ContentView(viewModel: RootViewModel())
+    }
+    - No such module 'Observation'：
+    import Foundation
+    import Observation
+
+    enum PaneZoomTarget {
+        case none
+        case text
+        case terminal
+    }
+    - /Users/liu/Desktop/doc/Toolbox/Toolbox.xcodeproj The macOS deployment
+     target 'MACOSX_DEPLOYMENT_TARGET' is set to 14.0,
+     but the range of supported deployment target versions is 10.13 to 13.1.99.
+3. 优化1:
+把“脚本元数据”配置化
+例如每个脚本一个配置：
+名称
+帮助文案
+是否使用上方文本框
+默认文本
+
+4. 优化2:
+文本框做自动保存
+不同脚本保留各自上次输入内容，不用每次重贴。

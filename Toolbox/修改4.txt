@@ -1,0 +1,6 @@
+1. 运行时提示：Thread 1: breakpoint 1.1 (1)， textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+2. 把所有的脚本都接入更多脚本参数，这几点都可配置，加入进去：
+    - 名称
+    - 帮助文案
+    - 是否使用上方文本框
+3. 点击左边每个脚本的名字上，才能切换，需要点击同一行的附近位置都能切换，修改好。

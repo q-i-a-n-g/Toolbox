@@ -1,0 +1,2 @@
+Check_App/check.app这个项目的相关文件都在Check_App文件夹下，
+查看所有相关文档、代码，给出一份AGENTS.md

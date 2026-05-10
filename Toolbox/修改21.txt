@@ -1,0 +1,14 @@
+1. Toolbox.app是一个工具箱，该项目都在Toolbox文件夹下，目前的成果：Toolbox_AppleSilicon_v9.zip、Toolbox_Intel_v9.zip
+2. Check_App/check.app 对多个excel表经过复杂的处理，得到最终的结果result.xlsx。该项目的相关文件都在Check_App文件夹下。
+3. 现在想把check.app作为一个功能，添加到Toolbox.app，作为其功能之一，放在左侧工具栏，取名：周检制表
+    - 放弃原先的固定data文件夹做为输入，周检制表 右侧上半部分 可拖入 Check_App/需求文档.txt 中的 基础任务文件，可以是下面几种形式
+        - 答+周.xlsx（含 Sheet1 和 Sheet2）
+        - 答+周.xlsx 拆分为两个独立文件（文件名可任意）时，通过以下方式区分：
+            - B 列"任务名称"中含"答题卡"的行所在 Sheet → 视为 Sheet1（答题卡链接用）
+            - B 列"任务名称"中不含"答题卡"的行所在 Sheet → 视为 Sheet2（分数链接用）
+        - 寒假.xlsx、秋季.xlsx、暑假.xlsx 中任意一个（只有一个 Sheet，用于 Sheet2）
+    - 周检制表 右侧下半部分是终端，点“开始”按钮，开始对基础任务文件进行处理、自动下载、进一步处理等，流程与check.app相同
+    - 下载的几个表放在默认的下载目录
+    - 生成的result.xlsx与Toolbox.app放在同一个文件夹
+    - 周检制表 右侧上半部分 提示：每日任务分配表（AI、答题卡） 拖到这里
+4. 不要立即开始动手，先写一份详细的任务计划文档，具体内容写入 Toolbox/修改22-添加check-app.txt，有其他需要补充、修改的地方也写进去。

@@ -1,0 +1,50 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+
+# Xcode
+build/
+DerivedData/
+*.moved-aside
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+xcuserdata/
+
+# App Bundles & Archives
+*.app/
+*.app.zip
+*.zip
+*.tar.gz
+*.7z
+
+# Logs & Temp
+*.log
+*.swp
+*~
+a.txt
+
+# Python Build (Check_App)
+Check_App/dist/
+Check_App/build/
+Check_App/node_modules/
+Check_App/data/
+Check_App/screenShot/
+Check_App/result.xlsx
+Check_App/__pycache__/
+
+# Toolbox Build
+Toolbox/build/
+Toolbox/DerivedData/
+
+# Generic Data & Screenshots
+**/*.xlsx
+**/*.png
+
+# Exceptions: Keep Assets and README images
+!**/Assets.xcassets/**/*.png
+!**/README.md
+!**/修改*.txt

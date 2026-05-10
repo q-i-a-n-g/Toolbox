@@ -1,0 +1,8 @@
+1. “停止”、“开始”按钮放在下面的中间位置，适当变大一点。
+2. “打开链接”改成“批量打开链接”
+3. 把配置文件真正接入更多脚本参数
+4. 下面的报错解决一下：
+    - Ambiguous use of 'greatestFiniteMagnitude'： textView.textContainer?.containerSize = NSSize(width: 0, height: .greatestFiniteMagnitude)
+    - Ambiguous use of 'greatestFiniteMagnitude'：        textView.textContainer?.containerSize = NSSize(width: .greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+    - 'self' used in property access 'selectedTool' before all stored properties are initialized：
+        self.editorMode = self.selectedTool.usesTextInput ? .input : .hidden

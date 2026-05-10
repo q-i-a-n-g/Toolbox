@@ -1,0 +1,56 @@
+# 任务计划文档：将 check.app 集成到 Toolbox
+
+## 1. 整体思路
+将原有的独立 Python 脚本应用（`Check_App/check_main.py`）作为核心处理逻辑，集成到 Swift 开发的 `Toolbox.app` 中。
+- **界面层 (SwiftUI)**：新增一个“周检制表”专属交互面板，上半部分提供拖拽区域接收基础任务文件，下半部分保留终端输出及“开始”按钮。
+- **逻辑层 (Python)**：修改 `check_main.py`，去除硬编码的 `data` 目录依赖，改为通过命令行参数（或环境变量）接收：输入文件路径、下载目录路径和结果输出路径。
+- **打包集成**：修改并测试 Python 脚本后，重新使用 PyInstaller 打包为独立的二进制文件，并放入 `Toolbox` 项目目录内，由 Swift 代码作为子进程拉起运行。
+
+## 2. 界面 (SwiftUI) 修改计划
+### 2.1 添加工具配置
+- 在 `Toolbox/Resources/tool_config.json` 中新增 `weekly-check` 工具配置，标题为“周检制表”，`usesTextInput` 设为 `false`。
+### 2.2 新增 WeeklyCheckPane 视图
+- 创建 `WeeklyCheckPane.swift`，包含上半部分的拖拽区域（Drop Zone）。
+- 提示文本：“每日任务分配表（AI、答题卡） 拖到这里”。
+- 支持拖入多个 Excel 文件（用于兼容 1 个“答+周”或拆分的 2 个文件等情况）。列表展示已拖入的文件名。
+- 底部布局包含“开始”按钮。
+### 2.3 修改 ContentView 和 RootViewModel
+- 在 `ContentView.swift` 中，当选中的工具 ID 为 `weekly-check` 时，显示上半部分 `WeeklyCheckPane`，下半部分显示 `TerminalPaneView`。
+- 在 `RootViewModel.swift` 中增加状态管理，用于保存拖入的文件路径列表（如 `@Published var weeklyCheckFiles: [URL] = []`）。
+- 开始执行时，在拉起终端服务 (`PTYTerminalService`) 前，向执行命令中传递特定的命令行参数。
+- **输出结果目录**：设置为 `Bundle.main.bundleURL.deletingLastPathComponent()`（App 所在目录）。
+- **下载目录**：获取用户的 Downloads 文件夹路径 `FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first`。
+
+## 3. Python 脚本 (check_main.py) 修改计划
+### 3.1 引入命令行参数 (argparse)
+- `--base-files`：接收拖拽进来的基础任务文件路径列表（多个参数）。
+- `--download-dir`：接收下载目录路径。
+- `--output-file`：接收生成的 result.xlsx 绝对保存路径。
+### 3.2 改造数据扫描逻辑 (scan_data_dir)
+- **原逻辑**：扫描 `data/` 下的所有文件，靠表头区分基础文件和被下载的明细文件。
+- **新逻辑**：
+  - **基础任务文件 (base_info)**：直接读取 `--base-files` 传入的路径集合。
+  - **明细文件 (named_data)**：由于下载时已使用标准名称（AI.xlsx、分数.xlsx 等）保存到 `--download-dir`，因此处理时直接从 `--download-dir` 下读取对应的文件进行数据生成。
+### 3.3 自动下载逻辑 (auto_download_files) 适配
+- 保存路径从原先的 `os.path.join(data_dir, filename)` 改为 `os.path.join(args.download_dir, filename)`。
+
+## 4. 集成与打包策略
+### 4.1 更新 Python 二进制
+- 在 `Check_App` 目录下，对修改后的 `check_main.py` 运行 PyInstaller 重新打包，生成 `check_main_bin`。
+- 将 `check_main_bin` 复制到 `Toolbox/Toolbox/Resources/Binaries/` 中。
+### 4.2 Script 调度桥接
+- 创建一个胶水脚本 `Toolbox/Toolbox/Resources/Scripts/周检制表.command`。
+- 该脚本读取环境变量（Swift 传入的环境变量：如 `BASE_FILES`，`DOWNLOAD_DIR`，`OUTPUT_FILE`）并调用上述二进制 `check_main_bin`。
+- 这样能无缝复用 Toolbox 现有的 PTY 终端执行逻辑。
+
+## 5. 执行流程总结
+1. 用户在 Toolbox 左侧边栏选择“周检制表”。
+2. 用户将 `答+周.xlsx` (或其拆分文件) 拖入右侧上方区域。
+3. 用户点击“开始”按钮。
+4. Swift 将获取的拖拽文件路径、系统的下载目录、App 当前所在目录拼接成环境变量，触发 `.command` 脚本。
+5. Python 逻辑执行：
+   - 解析拖拽进来的基础文件生成“拼链接” Sheet。
+   - 调用 Playwright 打开 Chrome，将明细文件下载到系统下载目录。
+   - 从下载目录读取明细文件和从参数读取基础文件进行数据拼接。
+   - 最终将 `result.xlsx` 生成在 `Toolbox.app` 同级目录。
+   - 终端实时输出过程，任务完成，保留输出信息供用户核对。

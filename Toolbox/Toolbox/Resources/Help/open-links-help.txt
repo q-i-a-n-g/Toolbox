@@ -1,0 +1,15 @@
+批量打开链接
+
+用法：
+1. 在上方输入多行链接内容。
+2. 点击“开始”。
+3. 每打开一批后，如需继续，在下方终端里按回车。
+
+支持格式：
+https://example.com/a
+12 https://example.com/b
+https://example.com/c note
+
+配置说明：
+- `BATCH_SIZE=10`
+  每批打开多少个链接后暂停，等待你按回车继续。

@@ -1,0 +1,6 @@
+1. 验证 PTY 交互 是个难点，把核心逻辑拆出来：PTY / shell 调用 → 单独模块
+    ，然后： 写 CLI 测试
+2. 写一个脚本，像这样：
+    #!/bin/bash
+    xcodebuild -scheme Toolbox build 2>&1 | tee build.log
+    然后我来build，你读取build.log、定位错误、改代码，实现半自动运行测试自动化。
