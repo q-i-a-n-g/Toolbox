@@ -48,3 +48,7 @@ Toolbox/DerivedData/
 !**/Assets.xcassets/**/*.png
 !**/README.md
 !**/修改*.txt
+!**/ffmpeg.zip
+Toolbox/Toolbox/Resources/Binaries/ffmpeg
+Toolbox/Toolbox/Resources/Binaries/ffmpeg_arm64
+Toolbox/Toolbox/Resources/Binaries/ffmpeg_x86_64
