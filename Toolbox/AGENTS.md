@@ -23,7 +23,15 @@ Toolbox 是一个原生的 macOS 应用程序，旨在为常用的 Bash 脚本�
 - `/Toolbox/ViewModels/`: `RootViewModel` 负责核心业务流转。
 - `/Toolbox/Services/`: 负责进程管理和 IO 拦截。
 - `/Toolbox/Resources/Scripts/`: 存放所有 `.command` 业务脚本。
-- `/Toolbox/Resources/Binaries/`: 存放 `ffmpeg` 等二进制工具。
+- `/Toolbox/Resources/Binaries/`: 存放 `ffmpeg` 等二进制工具；周检制表使用 **`check_main_pkg.zip`**（约 48MB，可上 GitHub）与解压后的 `check_main_pkg/`。解压目录内 Playwright 自带的 **`node` 约 112MB**，超过 GitHub 单文件 100MB 限制，**不得**将 `check_main_pkg/` 提交到 Git。Xcode 在 **Resources 阶段前** 会运行 *Unpack check_main_pkg* 脚本：若 `check_main_bin` 不存在或 zip 更新则解压。更新周检逻辑后：在 `Check_App` 执行 `python3 -m PyInstaller --noconfirm check_main_bin.spec`，再在仓库根执行：
+```bash
+REPO="$(git rev-parse --show-toplevel)"
+cd "$REPO/Toolbox/Toolbox/Resources/Binaries"
+rm -rf check_main_pkg check_main_pkg.zip
+cp -R "$REPO/Check_App/dist/check_main_bin" ./check_main_pkg
+zip -rq check_main_pkg.zip check_main_pkg -x "*.DS_Store"
+```
+  然后提交 **`check_main_pkg.zip`**。
 - `/Toolbox/Resources/tool_config.json`: 工具注册中心。
 
 ## 4. 开发规范 (Development Conventions)
@@ -71,4 +79,5 @@ lipo -extract arm64 ffmpeg -output ffmpeg_thin
     - **自动聚焦与启动**:
         - **带文本框的脚本**: 切换时立即将焦点锁定到**上方文本输入区域**。
         - **无文本框的脚本**: 切换时**自动启动脚本**，并立即将焦点锁定到**下方终端输入区域**。
+        - **例外**: `weekly-check`（周检制表）需先在上方拖入 Excel，再由用户点击「开始」；切换到此工具时**不**自动启动。
         - **切换即停止**: 切换工具时，必须自动停止当前正在运行的脚本。

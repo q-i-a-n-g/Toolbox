@@ -21,6 +21,10 @@ xcuserdata/
 *.tar.gz
 *.7z
 
+# PyInstaller 周检 onedir：内含的 Playwright `node` 单文件 >100MB，GitHub 拒绝推送。
+# 仓库只保留 `check_main_pkg.zip`（约 48MB）；解压目录由 Xcode Run Script / 本地脚本生成。
+Toolbox/Toolbox/Resources/Binaries/check_main_pkg/
+
 # Logs & Temp
 *.log
 *.swp
@@ -49,6 +53,7 @@ Toolbox/DerivedData/
 !**/README.md
 !**/修改*.txt
 !**/ffmpeg.zip
+!**/check_main_pkg.zip
 Toolbox/Toolbox/Resources/Binaries/ffmpeg
 Toolbox/Toolbox/Resources/Binaries/ffmpeg_arm64
 Toolbox/Toolbox/Resources/Binaries/ffmpeg_x86_64

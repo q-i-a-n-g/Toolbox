@@ -159,6 +159,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A00000000000000000000029 /* Build configuration list for PBXNativeTarget "Toolbox" */;
 			buildPhases = (
+				A00000000000000000000042 /* Unpack check_main_pkg */,
 				A00000000000000000000021 /* Sources */,
 				A0000000000000000000000B /* Frameworks */,
 				A00000000000000000000022 /* Resources */,
@@ -221,6 +222,29 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A00000000000000000000042 /* Unpack check_main_pkg */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${SRCROOT}/Toolbox/Resources/Binaries/check_main_pkg.zip",
+			);
+			name = "Unpack check_main_pkg";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"${SRCROOT}/Toolbox/Resources/Binaries/check_main_pkg/check_main_bin",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "#!/bin/sh\nset -e\nBINARIES=\"${SRCROOT}/Toolbox/Resources/Binaries\"\nZIP=\"${BINARIES}/check_main_pkg.zip\"\nTARGET=\"${BINARIES}/check_main_pkg/check_main_bin\"\nif [ ! -f \"$ZIP\" ]; then\n  echo \"error: missing ${ZIP} (GitHub 仅保留 zip，见 AGENTS.md)\"\n  exit 1\nfi\nif [ -x \"$TARGET\" ] && [ ! \"$ZIP\" -nt \"$TARGET\" ]; then\n  exit 0\nfi\necho \"Unpacking check_main_pkg.zip...\"\nrm -rf \"${BINARIES}/check_main_pkg\"\nunzip -oq \"$ZIP\" -d \"$BINARIES\"\nchmod +x \"$TARGET\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A00000000000000000000021 /* Sources */ = {
