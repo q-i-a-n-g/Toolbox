@@ -68,13 +68,14 @@ final class RootViewModel: ObservableObject {
 
         let loadedTools = ScriptTool.loadConfiguredTools()
         let initialTool = loadedTools.first ?? ScriptTool.fallbackTools[0]
+        
         self.tools = loadedTools
-        self.sidebarOrder = loadedTools.map(\.id)
-        restoreSidebarState()
-        applySidebarOrderToTools()
         self.selectedTool = initialTool
         self.editorMode = initialTool.usesTextInput ? .input : .hidden
-        // seedDefaultTextsIfNeeded()
+        self.sidebarOrder = loadedTools.map(\.id)
+        
+        restoreSidebarState()
+        applySidebarOrderToTools()
         restoreEditorForSelectedTool(clearText: true)
     }
 

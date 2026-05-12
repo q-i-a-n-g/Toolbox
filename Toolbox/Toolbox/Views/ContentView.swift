@@ -6,7 +6,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack {
-                Button(action: viewModel.toggleSidebarVisibility) {
+                Button(action: { viewModel.toggleSidebarVisibility() }) {
                     Image(systemName: viewModel.isSidebarVisible ? "sidebar.left" : "sidebar.right")
                         .foregroundStyle(Color.white.opacity(0.9))
                 }
@@ -21,9 +21,9 @@ struct ContentView: View {
                         allTools: viewModel.tools,
                         selectedID: viewModel.selectedTool.id,
                         onSelect: { viewModel.select($0) },
-                        onMove: viewModel.moveVisibleTools,
-                        isToolHidden: viewModel.isToolHidden,
-                        onToggleToolVisibility: viewModel.toggleToolVisibility
+                        onMove: { viewModel.moveVisibleTools(from: $0, to: $1) },
+                        isToolHidden: { viewModel.isToolHidden($0) },
+                        onToggleToolVisibility: { viewModel.toggleToolVisibility($0) }
                     )
                     .frame(minWidth: 84, idealWidth: 108, maxWidth: 132)
                     .background(Color(red: 0.145, green: 0.149, blue: 0.153))
@@ -31,33 +31,34 @@ struct ContentView: View {
                 }
 
                 Group {
-                if viewModel.selectedTool.id == "file-renamer" {
-                    FileRenamerPane(
-                        state: $viewModel.renamerState,
-                        isFocused: $viewModel.isRenamerFocused,
-                        onFolderDrop: { viewModel.updateRenamerFolder($0) },
-                        onStart: { viewModel.executeRename() },
-                        onUndo: { viewModel.undoRename() },
-                        onParamChange: { viewModel.refreshRenamerPreview() }
-                    )
-                } else if viewModel.selectedTool.id == "weekly-check" {
-                    VSplitView {
-                        WeeklyCheckPane(files: $viewModel.weeklyCheckFiles)
-                        terminalPane(showEditorControls: false)
-                    }
-                } else if viewModel.zoomTarget == .text && viewModel.shouldShowTextPane {
-                    textPane
-                } else if viewModel.zoomTarget == .terminal || !viewModel.shouldShowTextPane {
-                    terminalPane(showEditorControls: !viewModel.shouldShowTextPane)
-                } else {
-                    VSplitView {
+                    if viewModel.selectedTool.id == "file-renamer" {
+                        FileRenamerPane(
+                            state: $viewModel.renamerState,
+                            isFocused: $viewModel.isRenamerFocused,
+                            onFolderDrop: { viewModel.updateRenamerFolder($0) },
+                            onStart: { viewModel.executeRename() },
+                            onUndo: { viewModel.undoRename() },
+                            onParamChange: { viewModel.refreshRenamerPreview() }
+                        )
+                    } else if viewModel.selectedTool.id == "weekly-check" {
+                        VSplitView {
+                            WeeklyCheckPane(files: $viewModel.weeklyCheckFiles)
+                            terminalPane(showEditorControls: false)
+                        }
+                    } else if viewModel.zoomTarget == .text && viewModel.shouldShowTextPane {
                         textPane
-                        terminalPane(showEditorControls: false)
+                    } else if viewModel.zoomTarget == .terminal || !viewModel.shouldShowTextPane {
+                        terminalPane(showEditorControls: !viewModel.shouldShowTextPane)
+                    } else {
+                        VSplitView {
+                            textPane
+                            terminalPane(showEditorControls: false)
+                        }
                     }
                 }
+                .frame(minWidth: 360)
+                .background(Color(red: 0.118, green: 0.118, blue: 0.118))
             }
-            .frame(minWidth: 360)
-            .background(Color(red: 0.118, green: 0.118, blue: 0.118))
         }
         .padding(14)
         .background(Color(red: 0.118, green: 0.118, blue: 0.118))
