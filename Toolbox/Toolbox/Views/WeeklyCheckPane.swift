@@ -67,24 +67,27 @@ struct WeeklyCheckDropZoneView: View {
             for provider in providers {
                 group.enter()
                 provider.loadObject(ofClass: URL.self) { url, _ in
-                    if let url = url {
+                    DispatchQueue.main.async {
+                        defer { group.leave() }
+                        guard let url = url else { return }
                         var isDir: ObjCBool = false
-                        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue {
-                            if url.pathExtension.lowercased() == "xlsx" || url.pathExtension.lowercased() == "xls" {
-                                DispatchQueue.main.async {
-                                    newFiles.append(url)
-                                }
-                            }
-                        }
+                        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else { return }
+                        let ext = url.pathExtension.lowercased()
+                        guard ext == "xlsx" || ext == "xls" else { return }
+                        newFiles.append(url)
                     }
-                    group.leave()
                 }
             }
             
             group.notify(queue: .main) {
-                if !newFiles.isEmpty {
-                    self.files = newFiles
+                guard !newFiles.isEmpty else { return }
+                var seen = Set(self.files.map { $0.path })
+                var merged = self.files
+                for url in newFiles where !seen.contains(url.path) {
+                    seen.insert(url.path)
+                    merged.append(url)
                 }
+                self.files = merged
             }
             return true
         }

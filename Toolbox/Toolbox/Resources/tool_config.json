@@ -41,7 +41,7 @@
   },
   {
     "id": "weekly-check",
-    "title": "周检制表",
+    "title": "AI&答题卡-检查",
     "scriptRelativePath": "周检制表.command",
     "usesTextInput": false,
     "defaultText": "",

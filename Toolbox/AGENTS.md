@@ -56,12 +56,20 @@ zip -rq check_main_pkg.zip check_main_pkg -x "*.DS_Store"
 - **Xcode 设置**: 确保 `ONLY_ACTIVE_ARCH=NO`。
 
 ### 5.2 构建指令
-分别生成针对 Apple 芯片和 Intel 芯片的精简包：
-```bash
-# 1. 编译并生成 App
-xcodebuild -project Toolbox.xcodeproj -scheme Toolbox -configuration Release ARCHS="arm64" ...
+使用 Xcode 命令行（需先 `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`，若默认指向 CommandLineTools 会找不到 `xcodebuild`）。工程内 **Scheme 名为 `ScriptToolbox`**（Target 仍为 `Toolbox`）。
 
-# 2. 瘦身二进制 (重要)
+分别生成针对 Apple 芯片和 Intel 芯片的精简包，可直接运行仓库内脚本（会先对 `ffmpeg` 做 `lipo` 提纯再分别编译）：
+```bash
+cd Toolbox   # 即包含 Toolbox.xcodeproj 的目录
+./package.sh
+```
+若 `Resources/Binaries/ffmpeg` 不存在、仅有 `ffmpeg_arm64` 与 `ffmpeg_x86_64`，请先合并：`lipo -create ffmpeg_arm64 ffmpeg_x86_64 -output ffmpeg`。
+可选环境变量：`TOOLBOX_SCHEME`（默认 `ScriptToolbox`）、`TOOLBOX_PACKAGE_OUTPUT_DIR`（若设置且为已存在目录，则额外复制 zip 到该路径）。
+
+手动示例：
+```bash
+xcodebuild -project Toolbox.xcodeproj -scheme ScriptToolbox -configuration Release ARCHS="arm64" ONLY_ACTIVE_ARCH=NO ...
+# 瘦身二进制 (重要)
 # 使用 lipo 剥离 ffmpeg 中多余的架构代码以大幅减小体积
 lipo -extract arm64 ffmpeg -output ffmpeg_thin
 ```

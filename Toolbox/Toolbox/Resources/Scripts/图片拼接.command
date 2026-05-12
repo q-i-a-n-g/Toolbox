@@ -110,129 +110,6 @@ collect_images_natural_sorted() {
   )
 }
 
-create_group_report_xlsx() {
-  local report_tsv="$1"
-  local report_xlsx="$2"
-  local tmp_dir
-  local row_num
-  local rows_xml
-  local dimension
-  local name
-  local pos
-  local shaded
-  local style
-  local row_attr
-  local name_escaped
-  local pos_escaped
-
-  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/stack_group_xlsx.XXXXXX")" || return 1
-  mkdir -p "$tmp_dir/_rels" "$tmp_dir/xl/_rels" "$tmp_dir/xl/worksheets" || {
-    rm -rf "$tmp_dir"
-    return 1
-  }
-
-  row_num=1
-  rows_xml='<row r="1"><c r="A1" t="inlineStr"><is><t>图片名称</t></is></c><c r="B1" t="inlineStr"><is><t>位置</t></is></c></row>'
-  while IFS=$'\t' read -r name pos shaded; do
-    [[ -z "${name}${pos}${shaded}" ]] && continue
-    row_num=$((row_num + 1))
-    style=""
-    row_attr=""
-    if [[ "$shaded" == "1" ]]; then
-      style=' s="1"'
-      row_attr=' s="1" customFormat="1"'
-    fi
-    name_escaped="$(printf '%s' "$name" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
-    pos_escaped="$(printf '%s' "$pos" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
-    rows_xml="${rows_xml}<row r=\"${row_num}\"${row_attr}><c r=\"A${row_num}\"${style} t=\"inlineStr\"><is><t>${name_escaped}</t></is></c><c r=\"B${row_num}\"${style} t=\"inlineStr\"><is><t>${pos_escaped}</t></is></c></row>"
-  done < "$report_tsv"
-
-  dimension="A1:B${row_num}"
-
-  cat > "$tmp_dir/[Content_Types].xml" <<'EOF'
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-</Types>
-EOF
-
-  cat > "$tmp_dir/_rels/.rels" <<'EOF'
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>
-EOF
-
-  cat > "$tmp_dir/xl/workbook.xml" <<'EOF'
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
- xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets>
-    <sheet name="分组结果" sheetId="1" r:id="rId1"/>
-  </sheets>
-</workbook>
-EOF
-
-  cat > "$tmp_dir/xl/_rels/workbook.xml.rels" <<'EOF'
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>
-EOF
-
-  cat > "$tmp_dir/xl/styles.xml" <<'EOF'
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="1">
-    <font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font>
-  </fonts>
-  <fills count="3">
-    <fill><patternFill patternType="none"/></fill>
-    <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFE6E6E6"/><bgColor rgb="FFE6E6E6"/></patternFill></fill>
-  </fills>
-  <borders count="1">
-    <border><left/><right/><top/><bottom/><diagonal/></border>
-  </borders>
-  <cellStyleXfs count="1">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
-  </cellStyleXfs>
-  <cellXfs count="2">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/>
-  </cellXfs>
-  <cellStyles count="1">
-    <cellStyle name="Normal" xfId="0" builtinId="0"/>
-  </cellStyles>
-</styleSheet>
-EOF
-
-  cat > "$tmp_dir/xl/worksheets/sheet1.xml" <<EOF
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <dimension ref="${dimension}"/>
-  <sheetViews><sheetView workbookViewId="0"/></sheetViews>
-  <sheetFormatPr defaultRowHeight="15"/>
-  <cols><col min="1" max="1" width="36" customWidth="1"/><col min="2" max="2" width="12" customWidth="1"/></cols>
-  <sheetData>${rows_xml}</sheetData>
-</worksheet>
-EOF
-
-  rm -f "$report_xlsx"
-  (
-    cd "$tmp_dir" || exit 1
-    zip -q -r "$report_xlsx" "[Content_Types].xml" "_rels" "xl"
-  )
-  local rc=$?
-  rm -rf "$tmp_dir"
-  return $rc
-}
-
 run_stack_group() {
   local mode="$1"
   local out_file="$2"
@@ -295,7 +172,6 @@ run_stack_group() {
 check_bin ffmpeg
 check_bin sips
 check_bin ls
-check_bin zip
 
 echo "======================================"
 echo "[1] 上下 两两 拼接"
@@ -347,8 +223,6 @@ if (( total < group_size )); then
   exit 1
 fi
 
-report_tsv="$(mktemp "${TMPDIR:-/tmp}/stack_group_report.XXXXXX.tsv")"
-report_xlsx="${out_dir}/${REPORT_FILE_NAME:-图片分组结果.xlsx}"
 
 processed=0
 failed=0
@@ -392,18 +266,6 @@ while (( i < total )); do
     break
   fi
 
-  group_index=$((i / group_size))
-  shade_flag=0
-  if (( group_index % 2 == 0 )); then
-    shade_flag=1
-  fi
-
-  for idx in "${!group[@]}"; do
-    img_name="$(basename "${group[$idx]}")"
-    pos_label="${position_labels[$idx]}"
-    printf '%s\t%s\t%s\n' "$img_name" "$pos_label" "$shade_flag" >> "$report_tsv"
-  done
-
   first_name="$(basename "${group[0]}")"
   base="${first_name%.*}"
   ext="${first_name##*.}"
@@ -423,12 +285,6 @@ if (( ${#batch_pids[@]} > 0 )); then
   flush_batch
 fi
 
-report_ok=0
-if create_group_report_xlsx "$report_tsv" "$report_xlsx"; then
-  report_ok=1
-fi
-rm -f "$report_tsv"
-
 echo "======================================"
 echo "处理完成"
 echo "已生成 ${processed} 张图片"
@@ -436,12 +292,6 @@ if (( failed > 0 )); then
   echo "拼接失败 ${failed} 组"
 fi
 echo "输出文件夹：$out_dir"
-if (( report_ok == 1 )); then
-  echo "分组结果表：$report_xlsx"
-else
-  echo "提示：分组结果表生成失败。"
-fi
-
 if (( skipped > 0 )); then
   echo "提示：末尾不足 ${group_size} 张的 ${skipped} 张图片已跳过。"
 fi

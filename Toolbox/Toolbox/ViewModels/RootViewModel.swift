@@ -51,10 +51,15 @@ final class RootViewModel: ObservableObject {
     @Published var isRenamerFocused = false
     @Published var renamerState = RenamerState()
     @Published var weeklyCheckFiles: [URL] = []
+    @Published var isSidebarVisible: Bool = true
+    @Published private(set) var hiddenToolIDs: Set<String> = []
+    @Published private(set) var sidebarOrder: [String] = []
 
     private let terminalService = PTYTerminalService()
     private let defaults: UserDefaults
     private let textStorageKeyPrefix = "Toolbox.savedInput."
+    private let hiddenToolIDsKey = "Toolbox.sidebar.hiddenToolIDs"
+    private let sidebarOrderKey = "Toolbox.sidebar.order"
     private let fileStore = ToolFileStore()
     private var inputDraftByTool: [String: String] = [:]
 
@@ -64,10 +69,17 @@ final class RootViewModel: ObservableObject {
         let loadedTools = ScriptTool.loadConfiguredTools()
         let initialTool = loadedTools.first ?? ScriptTool.fallbackTools[0]
         self.tools = loadedTools
+        self.sidebarOrder = loadedTools.map(\.id)
+        restoreSidebarState()
+        applySidebarOrderToTools()
         self.selectedTool = initialTool
         self.editorMode = initialTool.usesTextInput ? .input : .hidden
         // seedDefaultTextsIfNeeded()
         restoreEditorForSelectedTool(clearText: true)
+    }
+
+    var visibleTools: [ScriptTool] {
+        tools.filter { !hiddenToolIDs.contains($0.id) }
     }
 
 
@@ -109,6 +121,10 @@ final class RootViewModel: ObservableObject {
             stopSelectedTool()
         }
 
+        if selectedTool.id == "weekly-check" && tool.id != "weekly-check" {
+            weeklyCheckFiles = []
+        }
+
         selectedTool = tool
         terminalText = ""
         resetToolSpecificState(for: tool)
@@ -120,6 +136,9 @@ final class RootViewModel: ObservableObject {
             // Auto-focus logic
             if tool.id == "file-renamer" {
                 self.isRenamerFocused = true
+            } else if tool.id == "weekly-check" {
+                // 需先拖入表格，再由用户点「开始」
+                self.isTerminalFocused = true
             } else if tool.usesTextInput {
                 self.isEditorFocused = true
             } else {
@@ -127,6 +146,39 @@ final class RootViewModel: ObservableObject {
                 self.startSelectedTool()
             }
         }
+    }
+
+    func toggleSidebarVisibility() {
+        isSidebarVisible.toggle()
+    }
+
+    func isToolHidden(_ toolID: String) -> Bool {
+        hiddenToolIDs.contains(toolID)
+    }
+
+    func toggleToolVisibility(_ toolID: String) {
+        if hiddenToolIDs.contains(toolID) {
+            hiddenToolIDs.remove(toolID)
+        } else {
+            hiddenToolIDs.insert(toolID)
+            if selectedTool.id == toolID, let fallback = visibleTools.first(where: { $0.id != toolID }) {
+                select(fallback)
+            }
+        }
+        defaults.set(Array(hiddenToolIDs), forKey: hiddenToolIDsKey)
+    }
+
+    func moveVisibleTools(from source: Int, to destination: Int) {
+        var visibleIDs = visibleTools.map(\.id)
+        guard source >= 0, source < visibleIDs.count else { return }
+        let moving = visibleIDs.remove(at: source)
+        let to = min(max(destination, 0), visibleIDs.count)
+        visibleIDs.insert(moving, at: to)
+
+        let hiddenIDs = tools.map(\.id).filter { hiddenToolIDs.contains($0) }
+        sidebarOrder = visibleIDs + hiddenIDs.filter { !visibleIDs.contains($0) }
+        applySidebarOrderToTools()
+        defaults.set(sidebarOrder, forKey: sidebarOrderKey)
     }
 
     func toggleZoom(for target: PaneZoomTarget) {
@@ -214,6 +266,14 @@ final class RootViewModel: ObservableObject {
             
             let outputDir = Bundle.main.bundleURL.deletingLastPathComponent().path
             extraEnv["OUTPUT_DIR"] = outputDir
+
+            // 脚本在临时目录执行，不能用相对路径找 Resources/Binaries
+            if let checkMainURL = Bundle.main.resourceURL?
+                .appendingPathComponent("Binaries", isDirectory: true)
+                .appendingPathComponent("check_main_pkg", isDirectory: true)
+                .appendingPathComponent("check_main_bin") {
+                extraEnv["CHECK_MAIN_BIN"] = checkMainURL.path
+            }
             
             // clear input
             inputText = ""
@@ -290,6 +350,27 @@ final class RootViewModel: ObservableObject {
 
     private func storageKey(for toolID: String) -> String {
         textStorageKeyPrefix + toolID
+    }
+
+    private func restoreSidebarState() {
+        if let hidden = defaults.array(forKey: hiddenToolIDsKey) as? [String] {
+            hiddenToolIDs = Set(hidden)
+        }
+        if let savedOrder = defaults.array(forKey: sidebarOrderKey) as? [String], !savedOrder.isEmpty {
+            let existingIDs = Set(tools.map(\.id))
+            let known = savedOrder.filter { existingIDs.contains($0) }
+            let missing = tools.map(\.id).filter { !known.contains($0) }
+            sidebarOrder = known + missing
+        }
+    }
+
+    private func applySidebarOrderToTools() {
+        let indexByID = Dictionary(uniqueKeysWithValues: sidebarOrder.enumerated().map { ($1, $0) })
+        tools.sort { lhs, rhs in
+            let li = indexByID[lhs.id] ?? Int.max
+            let ri = indexByID[rhs.id] ?? Int.max
+            return li < ri
+        }
     }
 
     private func resetToolSpecificState(for tool: ScriptTool) {

@@ -26,6 +26,7 @@
 		A00000000000000000000036 /* Configs in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000037 /* Configs */; };
 		A00000000000000000000038 /* PTYProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000039 /* PTYProcess.swift */; };
 		A00000000000000000000040 /* FileRenamerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000041 /* FileRenamerPane.swift */; };
+		A00000000000000000000043 /* WeeklyCheckPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000044 /* WeeklyCheckPane.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +50,7 @@
 		A00000000000000000000037 /* Configs */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Configs; sourceTree = "<group>"; };
 		A00000000000000000000039 /* PTYProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTYProcess.swift; sourceTree = "<group>"; };
 		A00000000000000000000041 /* FileRenamerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileRenamerPane.swift; sourceTree = "<group>"; };
+		A00000000000000000000044 /* WeeklyCheckPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyCheckPane.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -116,6 +118,7 @@
 				A00000000000000000000016 /* TextInputPane.swift */,
 				A00000000000000000000017 /* TerminalPaneView.swift */,
 				A00000000000000000000041 /* FileRenamerPane.swift */,
+				A00000000000000000000044 /* WeeklyCheckPane.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -263,6 +266,7 @@
 				A00000000000000000000032 /* ToolFileStore.swift in Sources */,
 				A00000000000000000000038 /* PTYProcess.swift in Sources */,
 				A00000000000000000000040 /* FileRenamerPane.swift in Sources */,
+				A00000000000000000000043 /* WeeklyCheckPane.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

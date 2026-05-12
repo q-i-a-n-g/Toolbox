@@ -1,11 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
+# 使用 onedir + Playwright 数据文件：onefile 大包在本机测试中出现长时间无响应，目录分发更稳定。
 
+from PyInstaller.utils.hooks import collect_data_files
+
+playwright_datas = collect_data_files("playwright")
 
 a = Analysis(
-    ['check_main.py'],
+    ["check_main.py"],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=playwright_datas,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -19,20 +23,27 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
-    name='check_main_bin',
+    exclude_binaries=True,
+    name="check_main_bin",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
+    upx=False,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch='universal2',
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="check_main_bin",
 )

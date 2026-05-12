@@ -4,17 +4,33 @@ struct ContentView: View {
     @ObservedObject var viewModel: RootViewModel
 
     var body: some View {
-        HSplitView {
-            SidebarView(
-                tools: viewModel.tools,
-                selectedID: viewModel.selectedTool.id,
-                onSelect: { viewModel.select($0) }
-            )
-            .frame(minWidth: 84, idealWidth: 108, maxWidth: 132)
-            .background(Color(red: 0.145, green: 0.149, blue: 0.153))
-            .overlay(Rectangle().fill(Color.white.opacity(0.2)).frame(width: 1), alignment: .trailing)
+        VStack(spacing: 10) {
+            HStack {
+                Button(action: viewModel.toggleSidebarVisibility) {
+                    Image(systemName: viewModel.isSidebarVisible ? "sidebar.left" : "sidebar.right")
+                        .foregroundStyle(Color.white.opacity(0.9))
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
 
-            Group {
+            HSplitView {
+                if viewModel.isSidebarVisible {
+                    SidebarView(
+                        tools: viewModel.visibleTools,
+                        allTools: viewModel.tools,
+                        selectedID: viewModel.selectedTool.id,
+                        onSelect: { viewModel.select($0) },
+                        onMove: viewModel.moveVisibleTools,
+                        isToolHidden: viewModel.isToolHidden,
+                        onToggleToolVisibility: viewModel.toggleToolVisibility
+                    )
+                    .frame(minWidth: 84, idealWidth: 108, maxWidth: 132)
+                    .background(Color(red: 0.145, green: 0.149, blue: 0.153))
+                    .overlay(Rectangle().fill(Color.white.opacity(0.2)).frame(width: 1), alignment: .trailing)
+                }
+
+                Group {
                 if viewModel.selectedTool.id == "file-renamer" {
                     FileRenamerPane(
                         state: $viewModel.renamerState,

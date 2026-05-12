@@ -1,9 +1,13 @@
 import sys
 
-# 立即打印启动信息，置于重量级 import 之前以提升响应感
-print("\n正在扫描基础任务文件...")
-print("=" * 50)
-sys.stdout.flush()
+def _is_help_argv() -> bool:
+    return "-h" in sys.argv or "--help" in sys.argv
+
+# 立即打印启动信息（--help 时不打印，避免干扰 argparse）
+if not _is_help_argv():
+    print(" - 正在扫描上传文件...")
+    print("=" * 50)
+    sys.stdout.flush()
 
 import os
 import argparse
@@ -19,7 +23,7 @@ from openpyxl.utils import get_column_letter
 try:
     from playwright.sync_api import sync_playwright
 except ImportError:
-    pass
+    sync_playwright = None  # type: ignore
 
 # ── 样式常量 ──────────────────────────────────────────────────────────────
 FONT = Font(name="等线", size=12)
@@ -195,7 +199,14 @@ def generic_build(wb, named_data, sheet_name, file_key, filter_fn, owner_map, li
 def auto_download_files(url1, url2, download_dir, label_width):
     user_data_dir = os.path.expanduser("~/.gemini/NewApp_chrome_profile")
     chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    if not os.path.exists(chrome_path): return False
+    if sync_playwright is None:
+        print("\n错误：Playwright 未安装或打包不完整，无法自动下载明细表。请使用源码环境运行或重新打包 check_main_bin。")
+        sys.stdout.flush()
+        return False
+    if not os.path.exists(chrome_path):
+        print(f"\n错误：未找到 Google Chrome（期望路径：{chrome_path}）。自动下载需要本机已安装 Chrome。")
+        sys.stdout.flush()
+        return False
     if not os.path.exists(user_data_dir): os.makedirs(user_data_dir, exist_ok=True)
 
     print("\n...下载更新 数据源表...")
@@ -251,7 +262,10 @@ def auto_download_files(url1, url2, download_dir, label_width):
             browser_context.close()
             print("")
             return True
-    except: return False
+    except Exception as e:
+        print(f"\n错误：自动下载失败：{e}")
+        sys.stdout.flush()
+        return False
 
 
 
@@ -309,11 +323,11 @@ def main():
 
     # 1. 分数识别
     c = generic_build(wb, named, "分数识别错误或忽略", "分数.xlsx", f_score, owner_map, yellow_cols=["是否有分数框", "分数识别情况"])
-    print(f"{pad_display('分数识别错误或忽略 ...', LABEL_WIDTH)}已生成 ✅ ({c})")
+    print(f"{pad_display('分数识别错误或忽略 ...', LABEL_WIDTH)}已生成 ✅ ({c}行)")
     
     # 2. 固定批改
     c = generic_build(wb, named, "固定批改错误或忽略", "AI.xlsx", f_fixed, owner_map, yellow_cols=["固定批改识别结果"])
-    print(f"{pad_display('固定批改错误或忽略 ...', LABEL_WIDTH)}已生成 ✅ ({c})")
+    print(f"{pad_display('固定批改错误或忽略 ...', LABEL_WIDTH)}已生成 ✅ ({c}行)")
     
     # 3. 题目框
     if "AI.xlsx" in named:
@@ -329,7 +343,7 @@ def main():
         ws.append(h + ["负责人", "兼职用的链接"])
         for r in final: ws.append(r + [lookup_owner(r, h, owner_map), convert_link(r[lk_idx])])
         apply_format(ws, yellow_cols=["题目框识别情况"])
-        print(f"{pad_display('题目框错误+忽略超过3个 ...', LABEL_WIDTH)}已生成 ✅ ({len(final)})")
+        print(f"{pad_display('题目框错误+忽略超过3个 ...', LABEL_WIDTH)}已生成 ✅ ({len(final)}行)")
     else: print(f"{pad_display('题目框错误+忽略超过3个 ...', LABEL_WIDTH)}等待补充 ⏳")
 
     # 4. BadCase
@@ -342,13 +356,13 @@ def main():
         for r in flt: ws.append(list(r) + [lookup_owner(r, h, owner_map), "", ""])
         apply_format(ws, yellow_cols=["批改情况", "是否AI可批", "作答结果-算法可解评测结果"])
         if len(flt) >= 2: ws.cell(row=int(round(len(flt)/2.0))+1, column=len(h)+3).fill = GREEN_FILL
-        print(f"{pad_display('BadCase ...', LABEL_WIDTH)}已生成 ✅ ({len(flt)})")
+        print(f"{pad_display('BadCase ...', LABEL_WIDTH)}已生成 ✅ ({len(flt)}行)")
     else: print(f"{pad_display('BadCase ...', LABEL_WIDTH)}等待补充 ⏳")
 
     # 5. 答题卡_分数
     f_c_score = lambda r, h: col(h, "是否有分数框")>=0 and col(h, "分数识别情况")>=0 and col(h, "分数-算法可解评测结果")>=0 and r[col(h, "是否有分数框")]=="有分数框" and r[col(h, "分数识别情况")] in ("忽略", "错误") and r[col(h, "分数-算法可解评测结果")]=="是"
     c = generic_build(wb, named, "答题卡_分数识别错误或忽略", "答题卡-分数.xlsx", f_c_score, owner_map, "cardPage", ["是否有分数框", "分数识别情况", "分数-算法可解评测结果"])
-    print(f"{pad_display('答题卡_分数识别错误或忽略 ...', LABEL_WIDTH)}已生成 ✅ ({c})")
+    print(f"{pad_display('答题卡_分数识别错误或忽略 ...', LABEL_WIDTH)}已生成 ✅ ({c}行)")
 
     # 6. 答题卡_AI_BadCase
     if "答题卡-AI.xlsx" in named:
@@ -359,7 +373,7 @@ def main():
         ws.append(h + ["负责人", "兼职用的链接"])
         for r in flt: ws.append(r + [lookup_owner(r, h, owner_map), convert_link(r[lk], "cardPage")])
         apply_format(ws, yellow_cols=["批改情况", "作答结果-算法可解评测结果"])
-        print(f"{pad_display('答题卡_AI_BadCase ...', LABEL_WIDTH)}已生成 ✅ ({len(flt)})")
+        print(f"{pad_display('答题卡_AI_BadCase ...', LABEL_WIDTH)}已生成 ✅ ({len(flt)}行)")
     else: print(f"{pad_display('答题卡_AI_BadCase ...', LABEL_WIDTH)}等待补充 ⏳")
 
     # 7. 答题卡_AI
@@ -390,7 +404,7 @@ def main():
                 ws.cell(row=ri, column=bid+1).fill = GRAY_FILL_S7
 
         apply_format(ws, yellow_cols=["批改情况", "作答结果-算法可解评测结果"])
-        print(f"{pad_display('答题卡_AI_错误次数≥3（星标参考） ...', LABEL_WIDTH)}已生成 ✅ ({len(fnl)})")
+        print(f"{pad_display('答题卡_AI_错误次数≥3（星标参考） ...', LABEL_WIDTH)}已生成 ✅ ({len(fnl)}行)")
     else: print(f"{pad_display('答题卡_AI_错误次数≥3（星标参考） ...', LABEL_WIDTH)}等待补充 ⏳")
 
     # 8. AI_错误次数≥3（星标参考）
@@ -451,7 +465,7 @@ def main():
             ws.column_dimensions[get_column_letter(ci)].hidden = True
             
         apply_format(ws, yellow_cols=["批改情况", "是否AI可批", "作答结果-算法可解评测结果"])
-        print(f"{pad_display('AI_错误次数≥3（星标参考） ...', LABEL_WIDTH)}已生成 ✅ ({len(final)})")
+        print(f"{pad_display('AI_错误次数≥3（星标参考） ...', LABEL_WIDTH)}已生成 ✅ ({len(final)}行)")
     else: print(f"{pad_display('AI_错误次数≥3（星标参考） ...', LABEL_WIDTH)}等待补充 ⏳")
 
     wb.save(out_path)

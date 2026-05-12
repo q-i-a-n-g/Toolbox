@@ -1,0 +1,3 @@
+1. 最近是按照 这个 Toolbox/修改22-添加check-app.txt 修改的，相关文件：Toolbox/implementation_plan_集成check-app.md、Toolbox/task-集成check-app.md、Toolbox/walkthrough-集成check-app.md，
+先检查修改的对不对，是否还有需要修改的地方
+2. 修改后最新的打包：Toolbox/Toolbox_AppleSilicon.zip ，测试了 ，能实现check.app的功能，但体积太大，需要精简，越小越好
