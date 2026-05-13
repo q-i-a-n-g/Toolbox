@@ -23,6 +23,7 @@ xcodebuild -project Toolbox.xcodeproj -scheme "$SCHEME" -configuration Release \
 rm -f build/arm64/Toolbox.app/Contents/Resources/Binaries/ffmpeg.bak
 rm -f build/arm64/Toolbox.app/Contents/Resources/Binaries/ffmpeg.zip
 rm -f build/arm64/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip
+strip -x build/arm64/Toolbox.app/Contents/Resources/Binaries/ffmpeg 2>/dev/null || true
 
 echo "Zipping arm64 app..."
 pushd build/arm64 > /dev/null
@@ -38,6 +39,7 @@ xcodebuild -project Toolbox.xcodeproj -scheme "$SCHEME" -configuration Release \
 rm -f build/x86_64/Toolbox.app/Contents/Resources/Binaries/ffmpeg.bak
 rm -f build/x86_64/Toolbox.app/Contents/Resources/Binaries/ffmpeg.zip
 rm -f build/x86_64/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip
+strip -x build/x86_64/Toolbox.app/Contents/Resources/Binaries/ffmpeg 2>/dev/null || true
 
 echo "Zipping x86_64 app..."
 pushd build/x86_64 > /dev/null

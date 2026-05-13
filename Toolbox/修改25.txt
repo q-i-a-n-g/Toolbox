@@ -1,0 +1,33 @@
+1. 修复：AI&答题卡-检查 只显示“上传文件数”后退出
+- 回退了对周检核心二进制的激进 strip（check_main_bin / playwright node），避免运行异常。
+- 调整终端噪声过滤，移除过宽关键词“Toolbox”，防止真实错误日志被吞掉。
+- 相关文件：
+  - Toolbox/package.sh
+  - Toolbox/Toolbox/ViewModels/RootViewModel.swift
+
+2. 右键勾选样式与对齐
+- 右键菜单改为白色对勾（checkmark）样式。
+- 未隐藏项显示白色对勾；隐藏项不显示。
+- 对勾列固定宽度，取消勾选后文字不再左右跳动。
+- 相关文件：
+  - Toolbox/Toolbox/Views/SidebarView.swift
+
+3. 侧边栏拖动排序体验优化
+- 行内增加“拖动”视觉提示（line.3.horizontal + “拖动排序”提示文案）。
+- 保留拖拽排序逻辑，改进 drop proposal 为 move。
+- 禁止“背景拖动窗口”，避免拖动侧边栏时误拖整个窗口。
+- 相关文件：
+  - Toolbox/Toolbox/Views/SidebarView.swift
+  - Toolbox/Toolbox/ToolboxApp.swift
+
+4. 其他已保留的修复
+- 批量打开链接脚本保持 bash3 兼容（去掉 mapfile），避免“未找到有效链接”误报。
+- 相关文件：
+  - Toolbox/Toolbox/Resources/Scripts/打开链接.command
+
+5. 重新自动测试与打包
+- xcodebuild（Xcode 14.2）Debug 构建通过：BUILD SUCCEEDED
+- 脚本语法检查通过：bash -n
+- 重新打包完成：
+  - Toolbox_AppleSilicon.zip
+  - Toolbox_Intel.zip

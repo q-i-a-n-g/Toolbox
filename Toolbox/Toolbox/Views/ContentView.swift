@@ -25,7 +25,7 @@ struct ContentView: View {
                         isToolHidden: { viewModel.isToolHidden($0) },
                         onToggleToolVisibility: { viewModel.toggleToolVisibility($0) }
                     )
-                    .frame(minWidth: 84, idealWidth: 108, maxWidth: 132)
+                    .frame(minWidth: 96, idealWidth: 132, maxWidth: 168)
                     .background(Color(red: 0.145, green: 0.149, blue: 0.153))
                     .overlay(Rectangle().fill(Color.white.opacity(0.2)).frame(width: 1), alignment: .trailing)
                 }

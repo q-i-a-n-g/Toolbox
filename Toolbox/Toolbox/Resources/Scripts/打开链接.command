@@ -20,54 +20,58 @@ extract_url() {
     printf '%s\n' "$1" | LC_ALL=C /usr/bin/perl -ne 'if (m{(https?://[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%-]+)}) { print "$1\n"; exit }'
 }
 
-exec 3< "$FILE"
-seen_tmp=""
-if [ "$DEDUPE_LINKS" = "1" ]; then
-    seen_tmp="$(mktemp "${TMPDIR:-/tmp}/scripttoolbox_seen_urls.XXXXXX")"
+collect_urls() {
+    local dedupe_flag="$1"
+    LC_ALL=C /usr/bin/awk -v dedupe="$dedupe_flag" '
+    {
+      if (match($0, /(https?:\/\/[A-Za-z0-9._~:\/?#\[\]@!$&()*+,;=%-]+)/)) {
+        u = substr($0, RSTART, RLENGTH)
+        if (dedupe == "1") {
+          if (!(u in seen)) {
+            seen[u] = 1
+            print u
+          }
+        } else {
+          print u
+        }
+      }
+    }' "$FILE"
+}
+
+urls=()
+while IFS= read -r u; do
+    [ -n "$u" ] && urls+=("$u")
+done < <(collect_urls "$DEDUPE_LINKS")
+
+if [ "${#urls[@]}" -eq 0 ]; then
+    echo
+    echo "👉 未找到有效链接。"
+    exit 1
 fi
 
-batch_count=0
 total_count=0
-
-while IFS= read -r line <&3 || [ -n "$line" ]; do
-
-    trimmed=$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-    [ -z "$trimmed" ] && continue
-    url="$(extract_url "$trimmed")"
-    [ -z "$url" ] && continue
-
-    if [ "$DEDUPE_LINKS" = "1" ]; then
-        if grep -Fxq "$url" "$seen_tmp"; then
-            continue
-        fi
-        printf '%s\n' "$url" >> "$seen_tmp"
+index=0
+while [ "$index" -lt "${#urls[@]}" ]; do
+    remaining=$(( ${#urls[@]} - index ))
+    batch_count="$BATCH_SIZE"
+    if [ "$remaining" -lt "$BATCH_SIZE" ]; then
+        batch_count="$remaining"
     fi
 
-    open "$url"
+    batch=("${urls[@]:index:batch_count}")
+    open "${batch[@]}"
+    total_count=$((total_count + batch_count))
+    index=$((index + batch_count))
 
-    # 极短顺序节流，保证浏览器按顺序接收
-    sleep 0.05
-
-    batch_count=$((batch_count + 1))
-    total_count=$((total_count + 1))
-
-    if [ "$batch_count" -eq "$BATCH_SIZE" ]; then
+    if [ "$index" -lt "${#urls[@]}" ]; then
         echo
         echo "✅ 已打开 $total_count 个链接"
         echo "👉 按 回车 继续打开下一批..."
         if ! read -r; then
             exit 0
         fi
-        batch_count=0
     fi
-
 done
-
-exec 3<&-
-if [ -n "$seen_tmp" ] && [ -f "$seen_tmp" ]; then
-    rm -f "$seen_tmp"
-fi
 
 echo
 echo "🎉 全部完成：共打开 $total_count 个链接"

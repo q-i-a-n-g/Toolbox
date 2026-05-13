@@ -16,7 +16,7 @@ struct PlainTextEditorView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
+        scrollView.hasHorizontalScroller = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
 
@@ -92,7 +92,7 @@ struct TerminalTextView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
+        scrollView.hasHorizontalScroller = false
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
         scrollView.autohidesScrollers = false
@@ -126,6 +126,11 @@ struct TerminalTextView: NSViewRepresentable {
             width: largeTextContainerWidth,
             height: largeTextContainerHeight
         )
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .left
+        textView.defaultParagraphStyle = paragraph
+        textView.alignment = .left
+        textView.typingAttributes[.paragraphStyle] = paragraph
         return textView
     }
 

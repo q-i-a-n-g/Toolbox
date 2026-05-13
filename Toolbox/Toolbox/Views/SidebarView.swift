@@ -27,7 +27,7 @@ struct SidebarView: View {
                                 draggingID = tool.id
                                 return NSItemProvider(object: tool.id as NSString)
                             }
-                            .onDrop(of: [UTType.text], delegate: SidebarDropDelegate(
+                            .onDrop(of: [UTType.plainText], delegate: SidebarDropDelegate(
                                 targetIndex: index,
                                 targetID: tool.id,
                                 draggingID: $draggingID,
@@ -42,7 +42,7 @@ struct SidebarView: View {
                     Button {
                         onToggleToolVisibility(tool.id)
                     } label: {
-                        Label(tool.title, systemImage: isToolHidden(tool.id) ? "square" : "checkmark.square.fill")
+                        Text(menuTitle(title: tool.title, shown: !isToolHidden(tool.id)))
                     }
                 }
             }
@@ -50,11 +50,12 @@ struct SidebarView: View {
     }
 
     private func toolRow(_ tool: ScriptTool) -> some View {
-        HStack {
+        HStack(spacing: 8) {
             Text(tool.title)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.white.opacity(0.9))
                 .lineLimit(1)
+
             Spacer()
         }
         .padding(.horizontal, 8)
@@ -74,13 +75,17 @@ struct SidebarView: View {
                 Button {
                     onToggleToolVisibility(menuTool.id)
                 } label: {
-                    Label(menuTool.title, systemImage: isToolHidden(menuTool.id) ? "square" : "checkmark.square.fill")
+                    Text(menuTitle(title: menuTool.title, shown: !isToolHidden(menuTool.id)))
                 }
             }
         }
         .onTapGesture {
             onSelect(tool)
         }
+    }
+
+    private func menuTitle(title: String, shown: Bool) -> String {
+        shown ? "✓  \(title)" : "    \(title)"
     }
 }
 
@@ -110,5 +115,9 @@ private struct SidebarDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         draggingID = nil
         return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }

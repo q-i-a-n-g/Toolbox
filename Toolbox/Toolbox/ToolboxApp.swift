@@ -16,14 +16,19 @@ struct ToolboxApp: App {
 }
 
 private struct WindowConfigurator: NSViewRepresentable {
+    private static let defaultSize = NSSize(width: 1152, height: 768)
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
-            window.isMovableByWindowBackground = true
-            window.setContentSize(NSSize(width: 720, height: 480))
+            window.isMovableByWindowBackground = false
+            window.setContentSize(Self.defaultSize)
+            let frame = NSRect(origin: window.frame.origin, size: Self.defaultSize)
+            window.setFrame(frame, display: true)
+            window.center()
             context.coordinator.installDoubleClickZoomHandler(for: window)
         }
         return view

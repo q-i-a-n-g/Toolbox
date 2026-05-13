@@ -292,7 +292,6 @@ final class RootViewModel: ObservableObject {
                     let noisePatterns = [
                         "XPC connection interrupted",
                         "sharedfilelistd.xpc",
-                        "Toolbox",
                         "No error handler for XPC error",
                         "Connection invalid"
                     ]

@@ -220,6 +220,16 @@ def auto_download_files(url1, url2, download_dir, label_width):
             )
             page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
 
+            def save_download(download_obj, target_path):
+                old_mtime = os.path.getmtime(target_path) if os.path.exists(target_path) else 0
+                if os.path.exists(target_path):
+                    os.remove(target_path)
+                download_obj.save_as(target_path)
+                if not os.path.exists(target_path):
+                    return False
+                new_mtime = os.path.getmtime(target_path)
+                return new_mtime > old_mtime and os.path.getsize(target_path) > 0
+
             def process_link(url, is_card=False):
                 page.goto(url)
                 try: page.wait_for_url(lambda u: "mapi.yuanfudao.com" in u, timeout=300000)
@@ -231,9 +241,10 @@ def auto_download_files(url1, url2, download_dir, label_width):
                     btn = page.get_by_role("button", name="导出评测详情")
                     btn.wait_for(state="visible", timeout=10000)
                     with page.expect_download(timeout=60000) as d: btn.click()
-                    d.value.save_as(os.path.join(download_dir, ai_file))
-                    print(f"{pad_display(ai_file.replace('-', '_'), label_width)}✅")
-                except: print(f"{pad_display(ai_file.replace('-', '_'), label_width)}❌")
+                    ok = save_download(d.value, os.path.join(download_dir, ai_file))
+                    print(f"{pad_display(ai_file.replace('-', '_'), label_width)}{'✅' if ok else '❌'}")
+                except:
+                    print(f"{pad_display(ai_file.replace('-', '_'), label_width)}❌")
                 sys.stdout.flush()
 
                 # Score.xlsx
@@ -251,10 +262,12 @@ def auto_download_files(url1, url2, download_dir, label_width):
                     btns = page.locator("button:has-text('导出Excel')")
                     if btns.count() >= 2:
                         with page.expect_download(timeout=60000) as d2: btns.last.click()
-                        d2.value.save_as(os.path.join(download_dir, score_file))
-                        print(f"{pad_display(score_file.replace('-', '_'), label_width)}✅")
-                    else: print(f"{pad_display(score_file.replace('-', '_'), label_width)}❌")
-                except: print(f"{pad_display(('答题卡-分数.xlsx' if is_card else '分数.xlsx').replace('-', '_'), label_width)}❌")
+                        ok = save_download(d2.value, os.path.join(download_dir, score_file))
+                        print(f"{pad_display(score_file.replace('-', '_'), label_width)}{'✅' if ok else '❌'}")
+                    else:
+                        print(f"{pad_display(score_file.replace('-', '_'), label_width)}❌")
+                except:
+                    print(f"{pad_display(('答题卡-分数.xlsx' if is_card else '分数.xlsx').replace('-', '_'), label_width)}❌")
                 sys.stdout.flush()
 
             if url1: process_link(url1, is_card=False)
