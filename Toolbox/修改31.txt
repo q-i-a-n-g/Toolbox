@@ -6,5 +6,4 @@
    - 右上角的“配置”仍在，需要删除
 4. AI 下载页 URL：https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage
 5. 答题卡下载页 URL：https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card
-6. 首次下载时，会自动跳转到登录页，登录方式：首次用户手动账号密码登录， 之后： 已登录态复用
-7. 继续连改、连测，直到把 修改27 全部闭环，然后打包，参考：Toolbox/AGENTS.md
+6. 继续连改、连测，直到把 修改27 全部闭环，然后打包，参考：Toolbox/AGENTS.md
