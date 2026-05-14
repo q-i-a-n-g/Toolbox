@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct FileRenamerPane: View {
     @Binding var state: RenamerState
@@ -137,6 +138,7 @@ struct DropZoneView: View {
                 Image(systemName: "folder.badge.plus")
                     .font(.largeTitle)
                     .foregroundColor(isHovering ? .accentColor : .secondary)
+                    .onTapGesture { appendFromPasteboard() }
                 
                 if let url = folderURL {
                     Text(url.lastPathComponent)
@@ -154,7 +156,7 @@ struct DropZoneView: View {
             }
         }
         .onDrop(of: [.fileURL], isTargeted: $isHovering) { providers in
-            providers.first?.loadObject(ofClass: URL.self) { url, _ in
+            _ = providers.first?.loadObject(ofClass: URL.self) { url, _ in
                 if let url = url {
                     var isDir: ObjCBool = false
                     if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
@@ -165,6 +167,16 @@ struct DropZoneView: View {
                 }
             }
             return true
+        }
+    }
+
+    private func appendFromPasteboard() {
+        let classes: [AnyClass] = [NSURL.self]
+        guard let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL],
+              let url = urls.first else { return }
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+            onDrop(url)
         }
     }
 }

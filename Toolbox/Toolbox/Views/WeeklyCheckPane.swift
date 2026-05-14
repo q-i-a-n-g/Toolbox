@@ -1,22 +1,15 @@
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 struct WeeklyCheckPane: View {
     @Binding var files: [URL]
-    
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("周检制表")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-            
             WeeklyCheckDropZoneView(files: $files)
                 .padding(.horizontal, 16)
+                .padding(.top, 12)
                 .padding(.bottom, 16)
         }
     }
@@ -31,22 +24,23 @@ struct WeeklyCheckDropZoneView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isHovering ? Color.accentColor : Color.secondary.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [6]))
                 .background(isHovering ? Color.accentColor.opacity(0.05) : Color.clear)
-            
+
             VStack(spacing: 8) {
-                Image(systemName: "doc.badge.plus")
-                    .font(.largeTitle)
+                Image(systemName: "tray.and.arrow.down")
+                    .font(.system(size: 32, weight: .regular))
                     .foregroundColor(isHovering ? .accentColor : .secondary)
-                
+                    .onTapGesture { appendFromPasteboard() }
+
                 if !files.isEmpty {
                     VStack(spacing: 4) {
-                        ForEach(files.prefix(3), id: \.self) { url in
+                        ForEach(files.prefix(4), id: \.self) { url in
                             Text(url.lastPathComponent)
                                 .font(.subheadline)
                                 .foregroundColor(.primary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
-                        if files.count > 3 {
+                        if files.count > 4 {
                             Text("等共 \(files.count) 个文件")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
@@ -61,35 +55,53 @@ struct WeeklyCheckDropZoneView: View {
             .padding()
         }
         .onDrop(of: [.fileURL], isTargeted: $isHovering) { providers in
-            var newFiles: [URL] = []
-            let group = DispatchGroup()
-            
-            for provider in providers {
-                group.enter()
-                provider.loadObject(ofClass: URL.self) { url, _ in
-                    DispatchQueue.main.async {
-                        defer { group.leave() }
-                        guard let url = url else { return }
-                        var isDir: ObjCBool = false
-                        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else { return }
-                        let ext = url.pathExtension.lowercased()
-                        guard ext == "xlsx" || ext == "xls" else { return }
-                        newFiles.append(url)
-                    }
-                }
-            }
-            
-            group.notify(queue: .main) {
-                guard !newFiles.isEmpty else { return }
-                var seen = Set(self.files.map { $0.path })
-                var merged = self.files
-                for url in newFiles where !seen.contains(url.path) {
-                    seen.insert(url.path)
-                    merged.append(url)
-                }
-                self.files = merged
-            }
+            appendFromProviders(providers)
             return true
         }
+        .onPasteCommand(of: [UTType.fileURL]) { providers in
+            appendFromProviders(providers)
+        }
+    }
+
+    private func appendFromPasteboard() {
+        let classes: [AnyClass] = [NSURL.self]
+        if let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL] {
+            appendFiles(urls)
+        }
+    }
+
+    private func appendFromProviders(_ providers: [NSItemProvider]) {
+        var newFiles: [URL] = []
+        let group = DispatchGroup()
+
+        for provider in providers {
+            group.enter()
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                DispatchQueue.main.async {
+                    defer { group.leave() }
+                    guard let url else { return }
+                    var isDir: ObjCBool = false
+                    guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else { return }
+                    let ext = url.pathExtension.lowercased()
+                    guard ext == "xlsx" || ext == "xls" else { return }
+                    newFiles.append(url)
+                }
+            }
+        }
+
+        group.notify(queue: .main) {
+            appendFiles(newFiles)
+        }
+    }
+
+    private func appendFiles(_ newFiles: [URL]) {
+        guard !newFiles.isEmpty else { return }
+        var seen = Set(files.map(\.path))
+        var merged = files
+        for url in newFiles where !seen.contains(url.path) {
+            seen.insert(url.path)
+            merged.append(url)
+        }
+        files = merged
     }
 }

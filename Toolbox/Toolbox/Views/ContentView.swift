@@ -12,6 +12,21 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
+
+                if viewModel.selectedTool.id == "daily-assign" || viewModel.selectedTool.id == "weekly-check" {
+                    Button(action: viewModel.toggleHelp) {
+                        Text(viewModel.helpButtonTitle)
+                            .foregroundColor(viewModel.helpButtonTitle == "关闭" ? .accentColor : .white.opacity(0.9))
+                    }
+                    .buttonStyle(.borderless)
+                }
+                if viewModel.selectedTool.id == "daily-assign" {
+                    Button(action: viewModel.handleConfigButton) {
+                        Text(viewModel.configButtonTitle)
+                            .foregroundColor(viewModel.configButtonTitle == "保存" ? .accentColor : .white.opacity(0.9))
+                    }
+                    .buttonStyle(.borderless)
+                }
             }
 
             HSplitView {
@@ -41,9 +56,28 @@ struct ContentView: View {
                             onParamChange: { viewModel.refreshRenamerPreview() }
                         )
                     } else if viewModel.selectedTool.id == "weekly-check" {
-                        VSplitView {
-                            WeeklyCheckPane(files: $viewModel.weeklyCheckFiles)
-                            terminalPane(showEditorControls: false)
+                        if viewModel.shouldShowTextPane {
+                            VSplitView {
+                                textPane
+                                terminalPane(showEditorControls: false)
+                            }
+                        } else {
+                            VSplitView {
+                                WeeklyCheckPane(files: $viewModel.weeklyCheckFiles)
+                                terminalPane(showEditorControls: false)
+                            }
+                        }
+                    } else if viewModel.selectedTool.id == "daily-assign" {
+                        if viewModel.shouldShowTextPane {
+                            VSplitView {
+                                textPane
+                                terminalPane(showEditorControls: false)
+                            }
+                        } else {
+                            VSplitView {
+                                DailyAssignPane(files: $viewModel.dailyAssignFiles, settings: $viewModel.dailyAssignSettings)
+                                terminalPane(showEditorControls: false)
+                            }
                         }
                     } else if viewModel.zoomTarget == .text && viewModel.shouldShowTextPane {
                         textPane
@@ -58,6 +92,17 @@ struct ContentView: View {
                 }
                 .frame(minWidth: 360)
                 .background(Color(red: 0.118, green: 0.118, blue: 0.118))
+                .overlay(alignment: .bottomTrailing) {
+                    Button(action: { viewModel.clearAllToolInputs() }) {
+                        Image("金银花1")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 110, height: 82)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 138)
+                }
             }
         }
         .padding(14)
@@ -73,6 +118,8 @@ struct ContentView: View {
             ),
             isFocused: $viewModel.isEditorFocused,
             isEditable: viewModel.isEditorEditable,
+            showHelpButton: viewModel.selectedTool.id != "weekly-check" && viewModel.selectedTool.id != "daily-assign",
+            showConfigButton: viewModel.selectedTool.id != "download-images" && viewModel.selectedTool.id != "weekly-check" && viewModel.selectedTool.id != "daily-assign",
             helpButtonTitle: viewModel.helpButtonTitle,
             configButtonTitle: viewModel.configButtonTitle,
             isZoomed: viewModel.zoomTarget == .text,
@@ -83,11 +130,16 @@ struct ContentView: View {
     }
 
     private func terminalPane(showEditorControls: Bool) -> some View {
-        TerminalPaneView(
+        let toolID = viewModel.selectedTool.id
+        let showHelp = toolID != "stitch-images" && toolID != "daily-assign" && toolID != "weekly-check"
+        let showConfig = toolID != "stitch-images" && toolID != "download-images" && toolID != "daily-assign" && toolID != "weekly-check"
+        return TerminalPaneView(
             outputText: viewModel.terminalText,
             isRunning: viewModel.isRunning,
             isZoomed: viewModel.zoomTarget == .terminal,
             showEditorControls: showEditorControls,
+            showHelpButton: showHelp,
+            showConfigButton: showConfig,
             helpButtonTitle: viewModel.helpButtonTitle,
             configButtonTitle: viewModel.configButtonTitle,
             isFocused: $viewModel.isTerminalFocused,

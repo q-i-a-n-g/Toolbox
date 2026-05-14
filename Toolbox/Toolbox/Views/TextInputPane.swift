@@ -5,6 +5,8 @@ struct TextInputPane: View {
     @Binding var text: String
     @Binding var isFocused: Bool
     let isEditable: Bool
+    let showHelpButton: Bool
+    let showConfigButton: Bool
     let helpButtonTitle: String
     let configButtonTitle: String
     let isZoomed: Bool
@@ -37,19 +39,23 @@ struct TextInputPane: View {
 
             Spacer()
 
-            Button(action: onHelp) {
-                Text(helpButtonTitle)
-                    .fontWeight(helpButtonTitle == "关闭" ? .bold : .regular)
-                    .foregroundColor(helpButtonTitle == "关闭" ? .accentColor : .primary)
+            if showHelpButton {
+                Button(action: onHelp) {
+                    Text(helpButtonTitle)
+                        .fontWeight(helpButtonTitle == "关闭" ? .bold : .regular)
+                        .foregroundColor(helpButtonTitle == "关闭" ? .accentColor : .primary)
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
 
-            Button(action: onConfig) {
-                Text(configButtonTitle)
-                    .fontWeight(configButtonTitle == "保存" ? .bold : .regular)
-                    .foregroundColor(configButtonTitle == "保存" ? .accentColor : .primary)
+            if showConfigButton {
+                Button(action: onConfig) {
+                    Text(configButtonTitle)
+                        .fontWeight(configButtonTitle == "保存" ? .bold : .regular)
+                        .foregroundColor(configButtonTitle == "保存" ? .accentColor : .primary)
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
 
             Button(action: onToggleZoom) {
                 Image(systemName: isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")

@@ -1,0 +1,10 @@
+1. 当前“每日分配”终端的右上角“帮助”、“配置”目前有2组，隐藏第2组
+2. 右侧中部：设置项，目前的内容如图：Toolbox/设置项2.png
+   - 我发现该区域是有边框的，外边框恢复最大，不要缩小
+   - 除了外边框之外，其他的内容保持当前大小，并且居中
+3. 图片批量下载
+   - 右上角的“配置”仍在，需要删除
+4. AI 下载页 URL：https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage
+5. 答题卡下载页 URL：https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card
+6. 首次下载时，会自动跳转到登录页，登录方式：首次用户手动账号密码登录， 之后： 已登录态复用
+7. 继续连改、连测，直到把 修改27 全部闭环，然后打包，参考：Toolbox/AGENTS.md

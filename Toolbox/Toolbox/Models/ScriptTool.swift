@@ -57,7 +57,8 @@ struct ScriptTool: Identifiable, Hashable, Codable {
 
     static func loadConfiguredTools() -> [ScriptTool] {
         guard
-            let url = Bundle.main.url(forResource: bundledConfigFileName, withExtension: "json"),
+            let url = Bundle.main.resourceURL?
+                .appendingPathComponent("\(bundledConfigFileName).json"),
             let data = try? Data(contentsOf: url),
             let tools = try? JSONDecoder().decode([ScriptTool].self, from: data),
             !tools.isEmpty

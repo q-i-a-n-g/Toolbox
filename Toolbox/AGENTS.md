@@ -63,6 +63,7 @@ zip -rq check_main_pkg.zip check_main_pkg -x "*.DS_Store"
 cd Toolbox   # 即包含 Toolbox.xcodeproj 的目录
 ./package.sh
 ```
+`ffmpeg.zip` 存的是合并架构文件；打包前脚本会抽取并使用 `Resources/Binaries/ffmpeg`，再分别 `lipo -extract arm64/x86_64` 去掉多余架构，缩小安装包体积。
 若 `Resources/Binaries/ffmpeg` 不存在、仅有 `ffmpeg_arm64` 与 `ffmpeg_x86_64`，请先合并：`lipo -create ffmpeg_arm64 ffmpeg_x86_64 -output ffmpeg`。
 可选环境变量：`TOOLBOX_SCHEME`（默认 `ScriptToolbox`）、`TOOLBOX_PACKAGE_OUTPUT_DIR`（若设置且为已存在目录，则额外复制 zip 到该路径）。
 

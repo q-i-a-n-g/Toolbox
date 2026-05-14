@@ -5,6 +5,8 @@ struct TerminalPaneView: View {
     let isRunning: Bool
     let isZoomed: Bool
     let showEditorControls: Bool
+    let showHelpButton: Bool
+    let showConfigButton: Bool
     let helpButtonTitle: String
     let configButtonTitle: String
     @Binding var isFocused: Bool
@@ -62,19 +64,23 @@ struct TerminalPaneView: View {
             Spacer()
 
             if showEditorControls {
-                Button(action: onHelp) {
-                    Text(helpButtonTitle)
-                        .fontWeight(helpButtonTitle == "关闭" ? .bold : .regular)
-                        .foregroundColor(helpButtonTitle == "关闭" ? .accentColor : .primary)
+                if showHelpButton {
+                    Button(action: onHelp) {
+                        Text(helpButtonTitle)
+                            .fontWeight(helpButtonTitle == "关闭" ? .bold : .regular)
+                            .foregroundColor(helpButtonTitle == "关闭" ? .accentColor : .primary)
+                    }
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
 
-                Button(action: onConfig) {
-                    Text(configButtonTitle)
-                        .fontWeight(configButtonTitle == "保存" ? .bold : .regular)
-                        .foregroundColor(configButtonTitle == "保存" ? .accentColor : .primary)
+                if showConfigButton {
+                    Button(action: onConfig) {
+                        Text(configButtonTitle)
+                            .fontWeight(configButtonTitle == "保存" ? .bold : .regular)
+                            .foregroundColor(configButtonTitle == "保存" ? .accentColor : .primary)
+                    }
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
             }
 
             Circle()

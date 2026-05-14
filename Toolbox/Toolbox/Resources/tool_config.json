@@ -48,5 +48,15 @@
     "helpText": "1. 拖入每日任务分配表（AI、答题卡）\n2. 点击“开始”自动下载并生成结果",
     "helpFileName": "weekly-check-help.txt",
     "configFileName": "weekly-check.env"
+  },
+  {
+    "id": "daily-assign",
+    "title": "每日分配",
+    "scriptRelativePath": "每日分配.command",
+    "usesTextInput": false,
+    "defaultText": "",
+    "helpText": "只上传报名截图，则自动下载今日任务的表格（AI+答题卡）\n上传报名截图 + 表格，则不自动下载\n“配置”中的名单用于校准，可修改",
+    "helpFileName": "daily-assign-help.txt",
+    "configFileName": "daily-assign.env"
   }
 ]

@@ -51,6 +51,8 @@ final class RootViewModel: ObservableObject {
     @Published var isRenamerFocused = false
     @Published var renamerState = RenamerState()
     @Published var weeklyCheckFiles: [URL] = []
+    @Published var dailyAssignFiles: [URL] = []
+    @Published var dailyAssignSettings = DailyAssignSettings()
     @Published var isSidebarVisible: Bool = true
     @Published private(set) var hiddenToolIDs: Set<String> = []
     @Published private(set) var sidebarOrder: [String] = []
@@ -124,6 +126,9 @@ final class RootViewModel: ObservableObject {
 
         if selectedTool.id == "weekly-check" && tool.id != "weekly-check" {
             weeklyCheckFiles = []
+        }
+        if selectedTool.id == "daily-assign" && tool.id != "daily-assign" {
+            dailyAssignFiles = []
         }
 
         selectedTool = tool
@@ -209,7 +214,19 @@ final class RootViewModel: ObservableObject {
             inputDraftByTool[selectedTool.id] = editorText
         }
         editorMode = .help
-        editorText = fileStore.loadHelpText(for: selectedTool)
+        if selectedTool.id == "daily-assign" {
+            editorText = """
+   - 只上传报名截图，则 [自动下载] 今日任务的表格（AI+答题卡）
+
+   - 上传报名截图 + 表格，则不自动下载
+
+   - “配置”中的名单用于校准，可修改
+"""
+        } else if selectedTool.id == "weekly-check" {
+            editorText = ""
+        } else {
+            editorText = fileStore.loadHelpText(for: selectedTool)
+        }
         if zoomTarget == .none {
             zoomTarget = .none
         }
@@ -218,7 +235,11 @@ final class RootViewModel: ObservableObject {
     func handleConfigButton() {
         if editorMode == .config {
             do {
-                try fileStore.saveConfigText(editorText, for: selectedTool)
+                if selectedTool.id == "daily-assign" {
+                    try saveDailyAssignConfig(from: editorText)
+                } else {
+                    try fileStore.saveConfigText(editorText, for: selectedTool)
+                }
             } catch {
                 terminalText += "\n[配置] 保存失败: \(error.localizedDescription)\n"
             }
@@ -230,7 +251,11 @@ final class RootViewModel: ObservableObject {
             inputDraftByTool[selectedTool.id] = editorText
         }
         editorMode = .config
-        editorText = fileStore.loadConfigText(for: selectedTool)
+        if selectedTool.id == "daily-assign" {
+            editorText = loadDailyAssignConfigTemplate()
+        } else {
+            editorText = fileStore.loadConfigText(for: selectedTool)
+        }
     }
 
     private var runSessionID = UUID()
@@ -278,6 +303,16 @@ final class RootViewModel: ObservableObject {
             
             // clear input
             inputText = ""
+        } else if selectedTool.id == "daily-assign" {
+            let filesPath = dailyAssignFiles.map { $0.path }.joined(separator: "|")
+            extraEnv["DAILY_ASSIGN_FILES"] = filesPath
+            extraEnv["DAILY_ASSIGN_METHOD"] = dailyAssignSettings.allocationMethod
+            extraEnv["DAILY_ASSIGN_AI_MAX"] = "\(max(1, dailyAssignSettings.aiMaxPages))"
+            extraEnv["DAILY_ASSIGN_CARD_MAX"] = "\(max(1, dailyAssignSettings.cardMaxPages))"
+            extraEnv["DAILY_ASSIGN_MODE"] = dailyAssignSettings.allocationMode
+            extraEnv["DOWNLOAD_DIR"] = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?.path ?? ""
+            extraEnv["OUTPUT_DIR"] = Bundle.main.bundleURL.deletingLastPathComponent().path
+            inputText = ""
         }
 
         terminalService.start(
@@ -320,7 +355,11 @@ final class RootViewModel: ObservableObject {
 
     func stopSelectedTool() {
         guard isRunning else { return }
-        terminalText += "\n[已停止]\n"
+        if selectedTool.id == "daily-assign" {
+            terminalText += "\nE006：[已停止]\n"
+        } else {
+            terminalText += "\n[已停止]\n"
+        }
         terminalService.stop()
         isRunning = false
         objectWillChange.send()
@@ -352,6 +391,39 @@ final class RootViewModel: ObservableObject {
         textStorageKeyPrefix + toolID
     }
 
+    private func loadDailyAssignConfigTemplate() -> String {
+        let raw = fileStore.loadConfigText(for: selectedTool)
+        let names = raw
+            .components(separatedBy: .newlines)
+            .first(where: { $0.hasPrefix("NAMES=") })?
+            .replacingOccurrences(of: "NAMES=", with: "") ?? ""
+        let chunks = names.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+        var lines: [String] = []
+        for i in stride(from: 0, to: chunks.count, by: 5) {
+            lines.append("   " + chunks[i..<min(i + 5, chunks.count)].joined(separator: ",") + (i + 5 < chunks.count ? "," : ""))
+        }
+        return """
+   # 校准名单（可编辑，英文逗号分隔）
+   # 名单中没有的，不会分配任务
+   {
+\(lines.joined(separator: "\n"))
+   }
+"""
+    }
+
+    private func saveDailyAssignConfig(from text: String) throws {
+        let regex = try NSRegularExpression(pattern: "[\\u4e00-\\u9fa5]{2,4}")
+        let range = NSRange(location: 0, length: text.utf16.count)
+        let names = regex.matches(in: text, options: [], range: range).compactMap {
+            Range($0.range, in: text).map { String(text[$0]) }
+        }
+        let unique = Array(NSOrderedSet(array: names)) as? [String] ?? names
+        let current = fileStore.loadConfigText(for: selectedTool)
+        let kept = current.components(separatedBy: .newlines).filter { !$0.hasPrefix("NAMES=") }
+        let merged = (["NAMES=" + unique.joined(separator: ",")] + kept).joined(separator: "\n")
+        try fileStore.saveConfigText(merged, for: selectedTool)
+    }
+
     private func restoreSidebarState() {
         if let hidden = defaults.array(forKey: hiddenToolIDsKey) as? [String] {
             hiddenToolIDs = Set(hidden)
@@ -376,6 +448,21 @@ final class RootViewModel: ObservableObject {
     private func resetToolSpecificState(for tool: ScriptTool) {
         if tool.id == "file-renamer" {
             renamerState = RenamerState()
+        }
+        if tool.id == "daily-assign" {
+            dailyAssignSettings = DailyAssignSettings()
+        }
+    }
+
+    func clearAllToolInputs() {
+        terminalText = ""
+        editorText = ""
+        weeklyCheckFiles = []
+        dailyAssignFiles = []
+        renamerState = RenamerState()
+        inputDraftByTool[selectedTool.id] = ""
+        if selectedTool.usesTextInput {
+            defaults.set("", forKey: storageKey(for: selectedTool.id))
         }
     }
 
