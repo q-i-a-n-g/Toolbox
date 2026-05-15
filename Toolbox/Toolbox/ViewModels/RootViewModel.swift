@@ -397,18 +397,42 @@ final class RootViewModel: ObservableObject {
             .components(separatedBy: .newlines)
             .first(where: { $0.hasPrefix("NAMES=") })?
             .replacingOccurrences(of: "NAMES=", with: "") ?? ""
-        let chunks = names.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
-        var lines: [String] = []
-        for i in stride(from: 0, to: chunks.count, by: 5) {
-            lines.append("   " + chunks[i..<min(i + 5, chunks.count)].joined(separator: ",") + (i + 5 < chunks.count ? "," : ""))
-        }
-        return """
+        
+        // If there are existing customized names, we format them.
+        // Otherwise, we use the user-requested exact default string.
+        if names.isEmpty {
+            return """
    # 校准名单（可编辑，英文逗号分隔）
+
    # 名单中没有的，不会分配任务
+
    {
-\(lines.joined(separator: "\n"))
+
+      李橙橙,符于娜,刘雨菲,阎思宇,王哲,
+      崔雅琪,李旻羲,汪哲锐,李梦洁,来晨,
+      王国通,马壮,郭小雨,李梦园,段凯莉,
+      韩正,郝佳益,李迪,蹇文慧,王子怡
+
    }
 """
+        } else {
+            let chunks = names.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+            var lines: [String] = []
+            for i in stride(from: 0, to: chunks.count, by: 5) {
+                lines.append("      " + chunks[i..<min(i + 5, chunks.count)].joined(separator: ",") + (i + 5 < chunks.count ? "," : ""))
+            }
+            return """
+   # 校准名单（可编辑，英文逗号分隔）
+
+   # 名单中没有的，不会分配任务
+
+   {
+
+\(lines.joined(separator: "\n"))
+
+   }
+"""
+        }
     }
 
     private func saveDailyAssignConfig(from text: String) throws {
@@ -456,13 +480,16 @@ final class RootViewModel: ObservableObject {
 
     func clearAllToolInputs() {
         terminalText = ""
-        editorText = ""
         weeklyCheckFiles = []
         dailyAssignFiles = []
         renamerState = RenamerState()
-        inputDraftByTool[selectedTool.id] = ""
-        if selectedTool.usesTextInput {
-            defaults.set("", forKey: storageKey(for: selectedTool.id))
+        
+        if editorMode != .config && editorMode != .help {
+            editorText = ""
+            inputDraftByTool[selectedTool.id] = ""
+            if selectedTool.usesTextInput {
+                defaults.set("", forKey: storageKey(for: selectedTool.id))
+            }
         }
     }
 

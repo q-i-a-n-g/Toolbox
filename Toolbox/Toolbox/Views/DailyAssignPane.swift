@@ -18,54 +18,69 @@ struct DailyAssignPane: View {
             DailyAssignDropZoneView(files: $files)
                 .frame(height: 120)
 
-            HStack {
-                Spacer()
-                VStack(alignment: .leading, spacing: 10) {
-                    Picker("", selection: $settings.allocationMethod) {
-                        Text("按页分配").tag("page")
-                        Text("按标签分配").tag("tag")
-                    }
-                    .pickerStyle(.segmented)
+            VStack(spacing: 0) {
+                HStack(alignment: .center, spacing: 30) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Picker("", selection: $settings.allocationMethod) {
+                            Text("按页分配").tag("page")
+                            Text("按标签分配").tag("tag")
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 200)
 
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 6) {
+                        Picker("", selection: $settings.allocationMode) {
+                            Text("AI+答题卡一起分配").tag("linked")
+                            Text("AI、答题卡独立分配").tag("independent")
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 200)
+                    }
+                    
+                    Divider()
+                        .frame(height: 60)
+                        .opacity(0.5)
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack(spacing: 12) {
                             Text("AI最多可分配页数")
-                                .foregroundColor(.white.opacity(0.9))
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 13, weight: .medium))
+                            Spacer()
                             TextField("200", value: $settings.aiMaxPages, format: .number)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(size: 13))
-                                .frame(width: 54)
+                                .frame(width: 56)
+                                .multilineTextAlignment(.center)
                         }
-                        VStack(alignment: .leading, spacing: 6) {
+                        .frame(width: 200)
+
+                        HStack(spacing: 12) {
                             Text("答题卡最多可分配页数")
-                                .foregroundColor(.white.opacity(0.9))
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 13, weight: .medium))
+                            Spacer()
                             TextField("300", value: $settings.cardMaxPages, format: .number)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(size: 13))
-                                .frame(width: 54)
+                                .frame(width: 56)
+                                .multilineTextAlignment(.center)
                         }
+                        .frame(width: 200)
                     }
-
-                    Picker("", selection: $settings.allocationMode) {
-                        Text("AI+答题卡一起分配").tag("linked")
-                        Text("AI、答题卡独立分配").tag("independent")
-                    }
-                    .pickerStyle(.segmented)
                 }
-                .padding(10)
-                .font(.system(size: 12))
-                .frame(maxWidth: 420)
-                Spacer()
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
             }
-            .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.white.opacity(0.05))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                    )
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
             )
         }
         .padding(.horizontal, 16)

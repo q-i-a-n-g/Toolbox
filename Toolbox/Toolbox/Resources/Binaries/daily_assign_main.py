@@ -114,8 +114,8 @@ def download_with_retry(url: str, target: Path) -> bool:
 
 
 def real_download(ai_target: Path, card_target: Path) -> bool:
-    ai_url = os.environ.get("DAILY_ASSIGN_AI_URL", "").strip()
-    card_url = os.environ.get("DAILY_ASSIGN_CARD_URL", "").strip()
+    ai_url = os.environ.get("DAILY_ASSIGN_AI_URL", "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage").strip()
+    card_url = os.environ.get("DAILY_ASSIGN_CARD_URL", "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card").strip()
     ok_ai = download_with_retry(ai_url, ai_target)
     ok_card = download_with_retry(card_url, card_target)
     if ok_ai and ok_card:
