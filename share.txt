@@ -1,0 +1,50 @@
+另一个Mac如何处理现在的2个分支
+
+
+在你的另一台 Mac 上，当前的本地代码状态大概率还停留在旧的提交节点上，并且可能还保留着已删除的 standalone 分支。
+
+为了让另一台 Mac 同步到最新的 main，同时保留 check-app 分支，请在那台 Mac 的项目目录下依次执行以下步骤：
+
+🔄 第三步：同步并更新 check-app 分支
+为了让你另一台 Mac 上的 check-app 分支也和云端最新的修改保持完全一致：
+
+bash
+# 1. 切换到 check-app 本地分支
+git checkout feature/integrate-check-app
+# 2. 拉取云端最新代码进行同步
+git pull
+
+# 💡 强力同步小贴士：如果你想让本地 check-app 分支完全强制对齐远程（放弃本地可能写乱的实验性代码），可以运行：
+# git reset --hard origin/feature/integrate-check-app
+
+⚠️ 避坑小贴士（如果另一台 Mac 有未保存的代码）
+如果你的另一台 Mac 上有一些还没保存或还没提交的临时修改，直接切换分支可能会报错。你可以先运行以下命令暂存修改，同步完后再恢复：
+
+bash
+# 切换前：暂存本地未提交的修改
+git stash
+# 执行上面的【第一步】、【第二步】和【第三步】同步与清理...
+# 同步完成后：切换回当时暂存的分支，并恢复修改
+git stash pop
+
+🚀 第一步：同步并更新 main 分支
+首先切回 main 分支，并拉取远程云端的最新合并成果。
+
+bash
+# 1. 切换到 main 分支
+git checkout main
+# 2. 获取远程最新状态并自动清理已在云端被删除的分支指针 (Prune)
+git fetch -p
+# 3. 将本地 main 分支更新到与云端同步的最新状态
+git pull
+
+🧹 第二步：仅清理本地 standalone 分支（保留 check-app 分支）
+现在 main 已经是最新的了。由于需要保留 check-app 分支，我们仅删除已弃用的 standalone 分支：
+
+bash
+# 1. 删除本地的 standalone 分支
+git branch -d feature/daily-allocation-standalone
+
+（注意：请不要运行删除 feature/integrate-check-app 的命令，这样就可以完整保留 check-app 分支）
+
+通过这套操作，你的另一台 Mac 既能同步最新的 main，又能让本地 check-app 分支与远程完全同步保持一致！
