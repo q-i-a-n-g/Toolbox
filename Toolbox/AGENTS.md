@@ -23,7 +23,7 @@ Toolbox 是一个原生的 macOS 应用程序，旨在为常用的 Bash 脚本�
 - `/Toolbox/ViewModels/`: `RootViewModel` 负责核心业务流转。
 - `/Toolbox/Services/`: 负责进程管理和 IO 拦截。
 - `/Toolbox/Resources/Scripts/`: 存放所有 `.command` 业务脚本。
-- `/Toolbox/Resources/Binaries/`: 存放 `ffmpeg` 等二进制工具；周检制表使用 **`check_main_pkg.zip`**（约 48MB，可上 GitHub）与解压后的 `check_main_pkg/`。解压目录内 Playwright 自带的 **`node` 约 112MB**，超过 GitHub 单文件 100MB 限制，**不得**将 `check_main_pkg/` 提交到 Git。Xcode 在 **Resources 阶段前** 会运行 *Unpack check_main_pkg* 脚本：若 `check_main_bin` 不存在或 zip 更新则解压。更新周检逻辑后：在 `Check_App` 执行 `python3 -m PyInstaller --noconfirm check_main_bin.spec`，再在仓库根执行：
+- `/Toolbox/Resources/Binaries/`: 存放 `ffmpeg` (拆分为针对不同架构的 **`ffmpeg_arm.zip`** 与 **`ffmpeg_intel.zip`**) 等二进制工具；周检制表使用 **`check_main_pkg.zip`**（约 48MB，可上 GitHub）与解压后的 `check_main_pkg/`。解压目录内 Playwright 自带的 **`node` 约 112MB**，超过 GitHub 单文件 100MB 限制，**不得**将 `check_main_pkg/` 提交到 Git。Xcode 在 **Resources 阶段前** 会运行 *Unpack check_main_pkg* 脚本：在编译/打包时自动检测目标架构，并解压对应的 zip 到本地 `ffmpeg` 二进制，若 zip 更新、或目标架构改变、或 `check_main_bin` 不存在，则执行解压。更新周检逻辑后：在 `Check_App` 执行 `python3 -m PyInstaller --noconfirm check_main_bin.spec`，再在仓库根执行：
 ```bash
 REPO="$(git rev-parse --show-toplevel)"
 cd "$REPO/Toolbox/Toolbox/Resources/Binaries"
@@ -58,13 +58,12 @@ zip -rq check_main_pkg.zip check_main_pkg -x "*.DS_Store"
 ### 5.2 构建指令
 使用 Xcode 命令行（需先 `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`，若默认指向 CommandLineTools 会找不到 `xcodebuild`）。工程内 **Scheme 名为 `ScriptToolbox`**（Target 仍为 `Toolbox`）。
 
-分别生成针对 Apple 芯片和 Intel 芯片的精简包，可直接运行仓库内脚本（会先对 `ffmpeg` 做 `lipo` 提纯再分别编译）：
+分别生成针对 Apple 芯片和 Intel 芯片的精简包，可直接运行仓库内脚本：
 ```bash
 cd Toolbox   # 即包含 Toolbox.xcodeproj 的目录
 ./package.sh
 ```
-`ffmpeg.zip` 存的是合并架构文件；打包前脚本会抽取并使用 `Resources/Binaries/ffmpeg`，再分别 `lipo -extract arm64/x86_64` 去掉多余架构，缩小安装包体积。
-若 `Resources/Binaries/ffmpeg` 不存在、仅有 `ffmpeg_arm64` 与 `ffmpeg_x86_64`，请先合并：`lipo -create ffmpeg_arm64 ffmpeg_x86_64 -output ffmpeg`。
+在打包时，Xcode 运行脚本会分别自动将对应的架构版本 `ffmpeg_arm.zip` 或 `ffmpeg_intel.zip` 解压为 `Binaries/ffmpeg`。这避免了使用庞大的 Universal 合并架构，并可直接在不同架构的 Mac 上一键打包，同时大幅缩小安装包的体积。
 可选环境变量：`TOOLBOX_SCHEME`（默认 `ScriptToolbox`）、`TOOLBOX_PACKAGE_OUTPUT_DIR`（若设置且为已存在目录，则额外复制 zip 到该路径）。
 
 手动示例：

@@ -35,17 +35,25 @@ APP_BIN_DIR="$BUILD_DIR/Debug/Toolbox.app/Contents/Resources/Binaries"
 # Process ffmpeg
 echo "Processing ffmpeg..."
 cd "$APP_BIN_DIR"
-if [ -f "ffmpeg.zip" ]; then
-    unzip -o ffmpeg.zip
-    if [ -f "Toolbox/Toolbox/Resources/Binaries/ffmpeg" ]; then
-        mv Toolbox/Toolbox/Resources/Binaries/ffmpeg .
-        rm -rf Toolbox
+if [ ! -f "ffmpeg" ]; then
+    # Fallback in case Xcode build phase didn't run (unlikely but safe)
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "arm64" ] && [ -f "ffmpeg_arm.zip" ]; then
+        unzip -oq ffmpeg_arm.zip
+    elif [ -f "ffmpeg_intel.zip" ]; then
+        unzip -oq ffmpeg_intel.zip
     fi
+fi
+
+if [ -f "ffmpeg" ]; then
     chmod +x ffmpeg
     # Optimization: Strip symbols from ffmpeg
-    strip ffmpeg
-    rm -f ffmpeg.zip
+    strip ffmpeg 2>/dev/null || true
+    rm -f ffmpeg_arm.zip ffmpeg_intel.zip
     echo "✓ ffmpeg optimized (stripped symbols)"
+else
+    echo "error: ffmpeg binary missing in bundle!"
+    exit 1
 fi
 
 # Process check_main_pkg
