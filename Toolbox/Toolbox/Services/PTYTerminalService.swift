@@ -98,10 +98,6 @@ final class PTYTerminalService {
         set -m # Enable job control to allow process groups
         """
         
-        for (key, value) in extraEnv {
-            script += "\nexport \(key)=\(shellQuote(value))"
-        }
-
         script += """
 
         set -a
@@ -109,6 +105,14 @@ final class PTYTerminalService {
           . \(shellQuote(runtimeConfigURL.path))
         fi
         set +a
+"""
+
+        for (key, value) in extraEnv {
+            script += "\nexport \(key)=\(shellQuote(value))"
+        }
+
+        script += """
+
         export PATH=\(shellQuote(binariesPath)):"$PATH"
         cd \(shellQuote(sessionDirectory.path))
         exec /bin/bash \(shellQuote(scriptURL.path))

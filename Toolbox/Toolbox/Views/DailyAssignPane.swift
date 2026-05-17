@@ -19,15 +19,16 @@ struct DailyAssignPane: View {
                 .frame(height: 120)
 
             VStack(spacing: 0) {
-                HStack(alignment: .center, spacing: 30) {
-                    VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .center, spacing: 0) {
+                    // Left Side: Pickers (Fixed width, trailing aligned)
+                    VStack(alignment: .trailing, spacing: 16) {
                         Picker("", selection: $settings.allocationMethod) {
                             Text("按页分配").tag("page")
                             Text("按标签分配").tag("tag")
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        .frame(width: 200)
+                        .frame(width: 300)
 
                         Picker("", selection: $settings.allocationMode) {
                             Text("AI+答题卡一起分配").tag("linked")
@@ -35,13 +36,16 @@ struct DailyAssignPane: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        .frame(width: 200)
+                        .frame(width: 300)
                     }
                     
+                    Spacer().frame(width: 20)
                     Divider()
                         .frame(height: 60)
                         .opacity(0.5)
+                    Spacer().frame(width: 20)
 
+                    // Right Side: Inputs (Fixed width, leading aligned)
                     VStack(alignment: .leading, spacing: 16) {
                         HStack(spacing: 12) {
                             Text("AI最多可分配页数")
@@ -54,7 +58,7 @@ struct DailyAssignPane: View {
                                 .frame(width: 56)
                                 .multilineTextAlignment(.center)
                         }
-                        .frame(width: 200)
+                        .frame(width: 240)
 
                         HStack(spacing: 12) {
                             Text("答题卡最多可分配页数")
@@ -67,10 +71,9 @@ struct DailyAssignPane: View {
                                 .frame(width: 56)
                                 .multilineTextAlignment(.center)
                         }
-                        .frame(width: 200)
+                        .frame(width: 240)
                     }
                 }
-                .padding(.horizontal, 24)
                 .padding(.vertical, 20)
             }
             .frame(maxWidth: .infinity)
@@ -105,7 +108,7 @@ private struct DailyAssignDropZoneView: View {
                     .onTapGesture { appendFromPasteboard() }
 
                 if files.isEmpty {
-                    Text("报名截图 + 今日任务表 拖到这里")
+                    Text("报名截图 拖到这里...")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 } else {

@@ -136,7 +136,7 @@ struct DropZoneView: View {
             
             VStack(spacing: 8) {
                 Image(systemName: "folder.badge.plus")
-                    .font(.largeTitle)
+                    .font(.system(size: 32, weight: .regular))
                     .foregroundColor(isHovering ? .accentColor : .secondary)
                     .onTapGesture { appendFromPasteboard() }
                 
@@ -149,7 +149,7 @@ struct DropZoneView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } else {
-                    Text("把 目标文件夹 拖到这里")
+                    Text("目标文件夹 拖到这里...")
                         .font(.headline)
                         .foregroundColor(.secondary)
                 }

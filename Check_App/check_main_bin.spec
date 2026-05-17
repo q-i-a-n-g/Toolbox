@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 playwright_datas = collect_data_files("playwright")
 
-a = Analysis(
+a_check = Analysis(
     ["check_main.py"],
     pathex=[],
     binaries=[],
@@ -18,11 +18,11 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-pyz = PYZ(a.pure)
+pyz_check = PYZ(a_check.pure)
 
-exe = EXE(
-    pyz,
-    a.scripts,
+exe_check = EXE(
+    pyz_check,
+    a_check.scripts,
     [],
     exclude_binaries=True,
     name="check_main_bin",
@@ -37,11 +37,47 @@ exe = EXE(
     entitlements_file=None,
 )
 
+a_daily = Analysis(
+    ["daily_assign_main.py"],
+    pathex=[],
+    binaries=[],
+    datas=playwright_datas,
+    hiddenimports=['playwright'],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    optimize=0,
+)
+pyz_daily = PYZ(a_daily.pure)
+
+exe_daily = EXE(
+    pyz_daily,
+    a_daily.scripts,
+    [],
+    exclude_binaries=True,
+    name="daily_assign_main_bin",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
 coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
+    exe_check,
+    a_check.binaries,
+    a_check.zipfiles,
+    a_check.datas,
+    exe_daily,
+    a_daily.binaries,
+    a_daily.zipfiles,
+    a_daily.datas,
     strip=False,
     upx=False,
     upx_exclude=[],

@@ -47,7 +47,7 @@ struct WeeklyCheckDropZoneView: View {
                         }
                     }
                 } else {
-                    Text("每日任务分配表（AI、答题卡） 拖到这里")
+                    Text("已分配的线上任务表，复制一份，拖到这里...")
                         .font(.headline)
                         .foregroundColor(.secondary)
                 }

@@ -147,7 +147,7 @@ final class RootViewModel: ObservableObject {
                 self.isTerminalFocused = true
             } else if tool.usesTextInput {
                 self.isEditorFocused = true
-            } else {
+            } else if tool.id != "daily-assign" {
                 // If it's a terminal-only tool, auto-start it (which also focuses terminal)
                 self.startSelectedTool()
             }
@@ -216,19 +216,34 @@ final class RootViewModel: ObservableObject {
         editorMode = .help
         if selectedTool.id == "daily-assign" {
             editorText = """
-   - 只上传报名截图，则 [自动下载] 今日任务的表格（AI+答题卡）
+                - 全自动：只拖入 报名截图 ，则 `自动下载` 今日的任务表（AI、答题卡），并自动生成 分配表.xlsx
 
-   - 上传报名截图 + 表格，则不自动下载
+                - 半自动：拖入 `报名截图 + 手动下载的表格`，适用于需要 `手动下载` 任务表的情况
 
-   - “配置”中的名单用于校准，可修改
+                - AI、答题卡独立分配：区分AI、答题卡，每个报名人都分到AI、答题卡（按比例）
+
+                - AI+答题卡一起分配：不区分AI、答题卡，合在一起分，有些人只分到AI，有些人只分到答题卡
 """
         } else if selectedTool.id == "weekly-check" {
-            editorText = ""
+            editorText = """
+                ## 功能
+
+                    - 自动打开统计详情页，下载 `AI、答题卡` 的统计详情表
+
+                    - 自动处理下载的表格，生成 `result.xlsx` 供检查。
+
+                ## 使用
+
+                    - 把已分配的线上任务表(`AI`或`AI+答题卡`)，复制一份，拖到拖拽区，点 [开始] 按钮
+
+                ## Tips
+
+                    - 首次运行，自动下载时，`需要登录`，之后就不用了
+
+                    - 无需手动删除旧文件（下载的、生成的），可`自动覆盖`
+"""
         } else {
             editorText = fileStore.loadHelpText(for: selectedTool)
-        }
-        if zoomTarget == .none {
-            zoomTarget = .none
         }
     }
 
@@ -310,8 +325,20 @@ final class RootViewModel: ObservableObject {
             extraEnv["DAILY_ASSIGN_AI_MAX"] = "\(max(1, dailyAssignSettings.aiMaxPages))"
             extraEnv["DAILY_ASSIGN_CARD_MAX"] = "\(max(1, dailyAssignSettings.cardMaxPages))"
             extraEnv["DAILY_ASSIGN_MODE"] = dailyAssignSettings.allocationMode
+            extraEnv["DAILY_ASSIGN_DOWNLOAD_MODE"] = "real"
             extraEnv["DOWNLOAD_DIR"] = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?.path ?? ""
             extraEnv["OUTPUT_DIR"] = Bundle.main.bundleURL.deletingLastPathComponent().path
+            if let ocrScript = Bundle.main.resourceURL?
+                .appendingPathComponent("Binaries", isDirectory: true)
+                .appendingPathComponent("ocr_vision.swift") {
+                extraEnv["OCR_VISION_SCRIPT"] = ocrScript.path
+            }
+            if let assignBin = Bundle.main.resourceURL?
+                .appendingPathComponent("Binaries", isDirectory: true)
+                .appendingPathComponent("check_main_pkg", isDirectory: true)
+                .appendingPathComponent("daily_assign_main_bin") {
+                extraEnv["DAILY_ASSIGN_BIN"] = assignBin.path
+            }
             inputText = ""
         }
 
@@ -393,54 +420,73 @@ final class RootViewModel: ObservableObject {
 
     private func loadDailyAssignConfigTemplate() -> String {
         let raw = fileStore.loadConfigText(for: selectedTool)
-        let names = raw
-            .components(separatedBy: .newlines)
-            .first(where: { $0.hasPrefix("NAMES=") })?
-            .replacingOccurrences(of: "NAMES=", with: "") ?? ""
+        let lines = raw.components(separatedBy: .newlines)
         
-        // If there are existing customized names, we format them.
-        // Otherwise, we use the user-requested exact default string.
-        if names.isEmpty {
-            return """
-   # 校准名单（可编辑，英文逗号分隔）
+        let defaultNames = [
+            "李橙橙", "符于娜", "刘雨菲", "阎思宇", "王哲",
+            "崔雅琪", "李旻羲", "汪哲锐", "李梦洁", "来晨",
+            "王国通", "马壮", "郭小雨", "李梦园", "段凯莉",
+            "韩@“”正", "郝佳益", "李迪", "蹇文慧", "王子怡"
+        ]
 
-   # 名单中没有的，不会分配任务
+        let buggyKeywords = Set(["校准名单", "可编辑", "英文逗号", "分隔", "名单中没", "有的", "不会分配", "任务"])
 
-   {
-
-      李橙橙,符于娜,刘雨菲,阎思宇,王哲,
-      崔雅琪,李旻羲,汪哲锐,李梦洁,来晨,
-      王国通,马壮,郭小雨,李梦园,段凯莉,
-      韩正,郝佳益,李迪,蹇文慧,王子怡
-
-   }
-"""
-        } else {
-            let chunks = names.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
-            var lines: [String] = []
-            for i in stride(from: 0, to: chunks.count, by: 5) {
-                lines.append("      " + chunks[i..<min(i + 5, chunks.count)].joined(separator: ",") + (i + 5 < chunks.count ? "," : ""))
+        var namesToUse = defaultNames
+        if let namesLine = lines.first(where: { $0.hasPrefix("NAMES=") }) {
+            let savedNames = namesLine.replacingOccurrences(of: "NAMES=", with: "")
+                .components(separatedBy: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && !buggyKeywords.contains($0) }
+            
+            if !savedNames.isEmpty {
+                namesToUse = savedNames
             }
-            return """
-   # 校准名单（可编辑，英文逗号分隔）
-
-   # 名单中没有的，不会分配任务
-
-   {
-
-\(lines.joined(separator: "\n"))
-
-   }
-"""
         }
+        
+        var resultLines: [String] = [
+            "--------------------------------------------------",
+            "",
+            "                # 校准名单（可编辑，英文逗号分隔）",
+            "",
+            "                # 名单中没有的，不会分配任务",
+            "",
+            "                {",
+            ""
+        ]
+        
+        for i in stride(from: 0, to: namesToUse.count, by: 5) {
+            let chunk = namesToUse[i..<min(i + 5, namesToUse.count)]
+            resultLines.append("                    " + chunk.joined(separator: ",") + (i + 5 < namesToUse.count ? "," : ""))
+            resultLines.append("")
+        }
+        
+        resultLines.append("                }")
+        resultLines.append("")
+        resultLines.append("--------------------------------------------------")
+        return resultLines.joined(separator: "\n")
     }
 
     private func saveDailyAssignConfig(from text: String) throws {
-        let regex = try NSRegularExpression(pattern: "[\\u4e00-\\u9fa5]{2,4}")
+        let pattern = "\\{(.*?)\\}"
+        let regex = try NSRegularExpression(pattern: pattern, options: .dotMatchesLineSeparators)
         let range = NSRange(location: 0, length: text.utf16.count)
-        let names = regex.matches(in: text, options: [], range: range).compactMap {
-            Range($0.range, in: text).map { String(text[$0]) }
+        
+        var names: [String] = []
+        if let match = regex.firstMatch(in: text, options: [], range: range),
+           let contentRange = Range(match.range(at: 1), in: text) {
+            let content = text[contentRange]
+            names = content
+                .components(separatedBy: CharacterSet(charactersIn: ",\n"))
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        } else {
+            // Updated regex to include special characters in 韩@“”正
+            let nameRegex = try NSRegularExpression(pattern: "[\\u4e00-\\u9fa5@“”]{1,10}")
+            names = nameRegex.matches(in: text, options: [], range: range).compactMap { match in
+                Range(match.range, in: text).map { String(text[$0]) }
+            }
         }
+        
         let unique = Array(NSOrderedSet(array: names)) as? [String] ?? names
         let current = fileStore.loadConfigText(for: selectedTool)
         let kept = current.components(separatedBy: .newlines).filter { !$0.hasPrefix("NAMES=") }
@@ -479,6 +525,7 @@ final class RootViewModel: ObservableObject {
     }
 
     func clearAllToolInputs() {
+        guard !isRunning else { return }
         terminalText = ""
         weeklyCheckFiles = []
         dailyAssignFiles = []
