@@ -4,7 +4,7 @@ import os
 import re
 import shutil
 import sys
-import random
+import json
 import urllib.request
 import subprocess
 import warnings
@@ -107,71 +107,223 @@ def mock_download(ai_target: Path, card_target: Path) -> bool:
     return True
 
 
+def normalize_task_text(text: str) -> str:
+    if not text:
+        return ""
+    t = str(text).strip()
+    t = re.sub(r"\s+", "", t)
+    t = t.replace("（", "(").replace("）", ")")
+    return t.lower()
+
+
+def _query_visible_task_names(page) -> List[str]:
+    try:
+        data = page.evaluate(
+            """() => {
+              const out = [];
+              // Check menu items
+              const menu = Array.from(document.querySelectorAll('ul.ant-menu h5, ul.ant-menu .ant-typography'));
+              for (const n of menu) {
+                const t = (n?.innerText || '').trim();
+                if (t) out.push(t);
+              }
+              // Check all table cells
+              const cells = Array.from(document.querySelectorAll('.ant-table-tbody tr td'));
+              for (const n of cells) {
+                const t = (n?.innerText || '').trim();
+                if (t) out.push(t);
+              }
+              // Check all links (especially encoded ones in URLs)
+              const links = Array.from(document.querySelectorAll('.ant-table-tbody tr a'));
+              for (const n of links) {
+                try {
+                    const href = n?.href || '';
+                    if (href) {
+                        out.push(href);
+                        out.push(decodeURIComponent(href));
+                    }
+                } catch(e) {}
+              }
+              return out.slice(0, 200);
+            }"""
+        )
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _take_screenshot(page, name: str):
+    try:
+        path = Path("screenShot") / f"{name}_{int(time.time())}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(path))
+        print(f"[截图] 已保存: {path.name}")
+    except Exception as e:
+        print(f"[截图] 失败: {e}")
+
+
+def _wait_search_match(page, task_name: str, timeout_ms: int = 20000) -> tuple[bool, List[str]]:
+    expect = normalize_task_text(task_name)
+    elapsed = 0
+    sample: List[str] = []
+    while elapsed <= timeout_ms:
+        rows = _query_visible_task_names(page)
+        if rows:
+            sample = rows[:8]
+            if any(expect and expect in normalize_task_text(r) for r in rows):
+                return True, sample
+        page.wait_for_timeout(500)
+        elapsed += 500
+    return False, sample
+
+
+def _click_export_button(page) -> bool:
+    selectors = [
+        'button:has-text("导 出"), button:has-text("导出")',
+        'button.ant-btn-primary:has-text("导")',
+        '.ant-space button.ant-btn-primary'
+    ]
+    for sel in selectors:
+        try:
+            locs = page.locator(sel)
+            for i in range(min(locs.count(), 8)):
+                btn = locs.nth(i)
+                txt = (btn.inner_text(timeout=500) or "").strip()
+                if "导" in txt and "出" in txt:
+                    if btn.is_visible() and btn.is_enabled():
+                        btn.scroll_into_view_if_needed()
+                        btn.click(timeout=8000, force=True)
+                        return True
+        except Exception:
+            continue
+    try:
+        ok = page.evaluate(
+            """() => {
+              const btns = Array.from(document.querySelectorAll('button.ant-btn-primary, button.ant-btn'));
+              const target = btns.find(b => {
+                const t = (b.innerText || '').replace(/\\s+/g, '');
+                return t.includes('导出') && !b.disabled;
+              });
+              if (!target) return false;
+              target.scrollIntoView();
+              target.click();
+              return true;
+            }"""
+        )
+        return bool(ok)
+    except Exception:
+        return False
+
+
 def _download_one_table(page, url: str, task_name: str, target: Path, label: str) -> bool:
     try:
-        page.goto(url, wait_until="domcontentloaded", timeout=30000)
-    except:
+        print(f"[下载] {label} 正在打开页面...")
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(2000) 
+    except Exception as e:
+        print(f"E002：{label} 页面打开失败 ({e})")
         return False
     
     page.bring_to_front()
     
     # 1. Input Task Name
-    input_sel = 'input#name'
     try:
-        page.wait_for_selector(input_sel, timeout=10000)
-        page.fill(input_sel, task_name)
-    except Exception:
-        try: page.fill('input[placeholder*="任务名"]', task_name)
-        except:
-            print(f"E002：无法在 {label} 页面输入任务名")
-            return False
-            
-    # 2. Click Search (搜 索)
-    try:
-        page.click('button:has-text("搜 索")', timeout=5000)
-        page.wait_for_timeout(1500)
-    except:
-        pass 
+        # Clear existing modals
+        page.evaluate("() => { const b = document.querySelector('.ant-modal-close'); if(b) b.click(); }")
         
-    # 3. Click Export (导 出)
+        input_sel = 'input#name, input[placeholder*="任务名"]'
+        page.wait_for_selector(input_sel, timeout=20000)
+        page.fill(input_sel, "")
+        page.type(input_sel, task_name, delay=20)
+    except Exception:
+        print(f"E002：无法在 {label} 页面输入任务名")
+        _take_screenshot(page, f"{label}_input_fail")
+        return False
+            
+    # 2) 搜索
     try:
-        page.click('button:has-text("导 出")', timeout=10000)
-    except:
-        print(f"E002：{label} 未找到导出按钮")
+        print(f"[下载] {label} 触发搜索...")
+        search_btn = page.get_by_role("button", name=re.compile(r"搜\s*索")).first
+        if search_btn.is_visible():
+            search_btn.click()
+        else:
+            page.keyboard.press("Enter")
+        
+        # Critical: Wait for loading to clear to ensure table data is for the SEARCHED task
+        page.wait_for_timeout(1000)
+        try:
+            loading = page.locator('.ant-spin-spinning, .ant-loading, .ant-table-loading')
+            if loading.count() > 0:
+                loading.first.wait_for(state="hidden", timeout=15000)
+        except: pass
+    except: pass
+    
+    ok_filter, _ = _wait_search_match(page, task_name, timeout_ms=20000)
+    if not ok_filter:
+        print(f"E002：{label} 搜索结果匹配失败（期望：{task_name}）")
+        _take_screenshot(page, f"{label}_search_fail")
+        return False
+    
+    # 3) 导出
+    print(f"[下载] {label} 准备导出...")
+    try:
+        # Use exact text match for "导出" button
+        export_btn = page.get_by_role("button", name=re.compile(r"导\s*出")).first
+        export_btn.scroll_into_view_if_needed()
+        export_btn.click(timeout=8000)
+    except Exception:
+        print(f"E002：{label} 点击导出按钮失败")
+        _take_screenshot(page, f"{label}_export_fail")
         return False
         
-    # 4. Click Confirm (确 定) in Modal and trigger download
+    # 4) 确认弹窗并下载
     try:
-        page.wait_for_timeout(1500) 
-        confirm_sel = '.ant-modal-footer button.ant-btn-primary'
-        with page.expect_download(timeout=30000) as download_info:
-            try:
-                page.wait_for_selector(confirm_sel, timeout=5000)
-                page.click(confirm_sel, force=True)
-            except:
-                try: page.click('button:has-text("确 定")', force=True)
-                except: page.click('button:has-text("确定")', force=True)
+        print(f"[下载] {label} 等待确认...")
+        page.wait_for_timeout(1500) # Wait for modal animation
+        
+        with page.expect_download(timeout=60000) as download_info:
+            # Try multiple common "Confirm" button variants
+            confirm_selectors = [
+                'button.ant-btn-primary:has-text("确 定")',
+                'button.ant-btn-primary:has-text("确定")',
+                '.ant-modal-footer button.ant-btn-primary',
+                'button:has-text("确 定")',
+                'button:has-text("确定")'
+            ]
+            clicked = False
+            for sel in confirm_selectors:
+                try:
+                    btn = page.locator(sel).last
+                    if btn.is_visible(timeout=2000):
+                        btn.click(force=True, timeout=3000)
+                        clicked = True
+                        break
+                except Exception: continue
+            
+            if not clicked:
+                page.keyboard.press("Enter")
         
         download = download_info.value
         new_file = download.path()
         
-        # Settle period to ensure OS completes write
-        time.sleep(1)
-        
-        # Verify file integrity and size
-        if not zipfile.is_zipfile(new_file) or os.path.getsize(new_file) < 2000:
-            time.sleep(2) # Final retry wait
-            if not zipfile.is_zipfile(new_file):
-                print(f"E002：{label} 表格下载损坏或内容为空 (Invalid Zip)")
-                return False
+        # Verify and save
+        if not os.path.exists(new_file) or os.path.getsize(new_file) < 500:
+            print(f"E002：{label} 下载文件不完整")
+            return False
                 
-        # Save result
         if os.path.exists(str(target)): os.remove(str(target))
         shutil.copy(new_file, str(target))
-        print(f"[下载] {label} 任务表格下载成功 ✅")
+        
+        # Strict content check to ensure it's not the "wrong" file
+        if not validate_downloaded_task(target, task_name):
+            print(f"E002：{label} 下载内容与目标任务不符（可能下载了全部数据或缓存数据）")
+            return False
+            
+        print(f"[下载] {label} 任务下载成功 ✅")
         return True
     except Exception as e:
-        print(f"E002：{label} 触发下载或保存失败 ({e})")
+        print(f"E002：{label} 下载确认超时或失败 ({e})")
+        _take_screenshot(page, f"{label}_final_fail")
         return False
 
 
@@ -193,8 +345,18 @@ def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: s
                 headless=False, no_viewport=True, args=["--remote-debugging-port=9222", "--start-maximized"]
             )
             page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
-            ok1 = _download_one_table(page, "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage", ai_task, ai_target, "AI")
-            ok2 = _download_one_table(page, "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card", card_task, card_target, "答题卡")
+
+            def download_with_retry(url: str, task: str, target: Path, label: str) -> bool:
+                for attempt in range(1, 4):
+                    ok = _download_one_table(page, url, task, target, label)
+                    if ok:
+                        return True
+                    print(f"[下载] {label} 第{attempt}次失败，准备重试...")
+                    page.wait_for_timeout(2000)
+                return False
+
+            ok1 = download_with_retry("https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage", ai_task, ai_target, "AI")
+            ok2 = download_with_retry("https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card", card_task, card_target, "答题卡")
             browser_context.close()
             return ok1 and ok2
     except Exception as e:
@@ -207,6 +369,36 @@ def to_num(v) -> float:
         if v is None: return 0.0
         return float(v)
     except: return 0.0
+
+
+def validate_downloaded_task(path: Path, expected_task_name: str) -> bool:
+    try:
+        wb = load_workbook(path, data_only=True)
+        ws = wb.worksheets[0]
+        header_row, task_col = None, None
+        for r in range(1, min(20, ws.max_row) + 1):
+            for c in range(1, min(20, ws.max_column) + 1):
+                if str(ws.cell(r, c).value or "").strip() == "任务名称":
+                    header_row, task_col = r, c
+                    break
+            if header_row is not None:
+                break
+        if header_row is None or task_col is None:
+            return False
+        names = []
+        for r in range(header_row + 1, ws.max_row + 1):
+            v = str(ws.cell(r, task_col).value or "").strip()
+            if v:
+                names.append(v)
+        if not names:
+            return False
+        expect = normalize_task_text(expected_task_name)
+        if any(expect and expect in normalize_task_text(n) for n in names):
+            return True
+        hits = sum(1 for n in names if expected_task_name in n)
+        return hits > 0
+    except Exception:
+        return False
 
 
 def read_tasks(path: Path, cap: int) -> Tuple[List[str], List[TaskRow]]:
@@ -243,15 +435,42 @@ def read_tasks(path: Path, cap: int) -> Tuple[List[str], List[TaskRow]]:
         cols = [ws.cell(r, c).value for c in range(start_col, start_col + 11)]
         out.append(TaskRow(order=order, cols=cols, subtask_id=subtask, pages=pages, tags=tags))
         order += 1
-    rnd = random.Random(int(date.today().strftime("%Y%m%d")))
-    rnd.shuffle(out)
-    picked, s = [], 0.0
-    for row in out:
-        if not picked:
-            picked.append(row); s += row.pages; continue
-        if s + row.pages <= cap:
-            picked.append(row); s += row.pages
-        if cap > 0 and s / cap >= 0.98: break
+    if cap <= 0:
+        return source_headers, []
+    # DP subset near cap; allow slight overflow to find better balance
+    weights = [max(1, int(round(r.pages))) for r in out]
+    # Allow more overflow in search to find more precise target
+    limit = max(1, int(round(cap * 1.05)))
+    prev_sum = [-1] * (limit + 1)
+    prev_idx = [-1] * (limit + 1)
+    prev_sum[0] = -2
+    for i, w in enumerate(weights):
+        for s in range(limit, w - 1, -1):
+            if prev_sum[s] == -1 and prev_sum[s - w] != -1:
+                prev_sum[s] = s - w
+                prev_idx[s] = i
+
+    target = int(round(cap))
+    best_s = 0
+    best_key = (10**9, 10**9)
+    for s in range(limit + 1):
+        if prev_sum[s] == -1:
+            continue
+        # Favor small overflow if it's closer to target
+        diff = abs(s - target)
+        # If error < 2%, it's already quite good
+        key = (diff, max(0, s - target)) 
+        if key < best_key:
+            best_key = key
+            best_s = s
+
+    picked_idx = set()
+    s = best_s
+    while s > 0 and prev_idx[s] != -1:
+        i = prev_idx[s]
+        picked_idx.add(i)
+        s = prev_sum[s]
+    picked = [out[i] for i in sorted(picked_idx, key=lambda x: out[x].order)]
     return source_headers, picked
 
 
@@ -336,6 +555,28 @@ def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[s
     return out, unmatched, order
 
 
+def parse_confirmed_signup(raw: str, names: List[str]) -> Dict[str, int]:
+    out: Dict[str, int] = {}
+    if not raw.strip():
+        return out
+    for part in raw.split("|"):
+        item = part.strip()
+        if not item or ":" not in item:
+            continue
+        n, c = item.split(":", 1)
+        name = n.strip()
+        if not name or name not in names:
+            continue
+        try:
+            cnt = int(c.strip())
+        except Exception:
+            continue
+        if cnt not in (2, 3, 5):
+            continue
+        out[name] = cnt
+    return out
+
+
 def assign(tasks: List[TaskRow], signup: Dict[str, int], weight_key: str, carry: Dict[str, float] | None = None):
     names = sorted(signup.keys())
     total_signup = sum(signup.values())
@@ -345,7 +586,8 @@ def assign(tasks: List[TaskRow], signup: Dict[str, int], weight_key: str, carry:
     if carry:
         for n in names: assigned_weight[n] += carry.get(n, 0.0)
     result, total_w = [], 0.0
-    for t in tasks:
+    tasks_sorted = sorted(tasks, key=lambda t: (t.pages if weight_key == "page" else t.tags, -t.order), reverse=True)
+    for t in tasks_sorted:
         w = t.pages if weight_key == "page" else t.tags
         if w <= 0: w = 1.0
         total_w += w
@@ -358,35 +600,104 @@ def assign(tasks: List[TaskRow], signup: Dict[str, int], weight_key: str, carry:
         assigned_count[best] += 1
         result.append([t, best])
     owner_tasks = {n: [] for n in names}
-    for i, (t, owner) in enumerate(result): owner_tasks[owner].append(i)
-    for _ in range(2000):
-        changed = False
-        current_total_w = sum(assigned_weight.values())
-        if current_total_w <= 0: break
+    for i, (_, owner) in enumerate(result):
+        owner_tasks[owner].append(i)
+
+    def score() -> tuple[float, float]:
+        total = max(sum(assigned_weight.values()), 1.0)
+        # Use relative error to target ratio for better precision on different weights
         devs = []
         for n in names:
-            ratio = assigned_weight[n] / current_total_w
-            devs.append((ratio - target_ratio[n], n))
-        devs.sort()
-        if all(abs(d[0]) <= 0.02 for d in devs): break
-        min_p, max_p = devs[0][1], devs[-1][1]
-        best_move_idx, best_reduction = -1, 0
-        for i in owner_tasks[max_p]:
-            task, _ = result[i]
-            w = task.pages if weight_key == "page" else task.tags
-            old_dist = abs(assigned_weight[max_p]/current_total_w - target_ratio[max_p]) + abs(assigned_weight[min_p]/current_total_w - target_ratio[min_p])
-            new_dist = abs((assigned_weight[max_p]-w)/current_total_w - target_ratio[max_p]) + abs((assigned_weight[min_p]+w)/current_total_w - target_ratio[min_p])
-            if new_dist < old_dist:
-                reduction = old_dist - new_dist
-                if reduction > best_reduction: best_reduction, best_move_idx = reduction, i
-        if best_move_idx != -1:
-            task, old_owner = result[best_move_idx]
-            w = task.pages if weight_key == "page" else task.tags
-            assigned_weight[old_owner] -= w; assigned_weight[min_p] += w
-            result[best_move_idx][1] = min_p
-            owner_tasks[old_owner].remove(best_move_idx); owner_tasks[min_p].append(best_move_idx)
-            changed = True
-        if not changed: break
+            target = target_ratio[n]
+            if target > 0:
+                devs.append(abs(assigned_weight[n] / total - target) / target)
+        if not devs: return 0.0, 0.0
+        return max(devs), sum(d * d for d in devs)
+
+    cur_score = score()
+    # Increase iterations and breadth for better convergence to < 2% relative error
+    for iter_idx in range(8000):
+        improved = False
+        total = max(sum(assigned_weight.values()), 1.0)
+        
+        # Sort by relative deviation
+        signed = []
+        for n in names:
+            target = target_ratio[n]
+            if target > 0:
+                signed.append((assigned_weight[n] / total / target - 1.0, n))
+        signed.sort()
+        
+        under = [n for d, n in signed if d < 0]
+        over = [n for d, n in reversed(signed) if d > 0]
+        
+        # Target relative error threshold 2% (0.02)
+        if cur_score[0] <= 0.02: 
+            break
+
+        # Move: check more candidates
+        for o in over[:8]:
+            for u in under[:8]:
+                best_i = None
+                best_local = cur_score
+                # Look deeper into task list
+                for i in owner_tasks[o][:200]:
+                    task, _ = result[i]
+                    w = task.pages if weight_key == "page" else task.tags
+                    assigned_weight[o] -= w
+                    assigned_weight[u] += w
+                    new_score = score()
+                    assigned_weight[o] += w
+                    assigned_weight[u] -= w
+                    if new_score < best_local:
+                        best_local = new_score
+                        best_i = i
+                if best_i is not None:
+                    task, _ = result[best_i]
+                    w = task.pages if weight_key == "page" else task.tags
+                    assigned_weight[o] -= w
+                    assigned_weight[u] += w
+                    result[best_i][1] = u
+                    owner_tasks[o].remove(best_i)
+                    owner_tasks[u].append(best_i)
+                    cur_score = best_local
+                    improved = True
+                    break
+            if improved: break
+        if improved: continue
+
+        # Swap: check more pairs
+        for o in over[:6]:
+            for u in under[:6]:
+                best_pair = None
+                best_local = cur_score
+                for i in owner_tasks[o][:100]:
+                    t1, _ = result[i]
+                    w1 = t1.pages if weight_key == "page" else t1.tags
+                    for j in owner_tasks[u][:100]:
+                        t2, _ = result[j]
+                        w2 = t2.pages if weight_key == "page" else t2.tags
+                        if abs(w1 - w2) < 0.001: continue
+                        assigned_weight[o] += (w2 - w1)
+                        assigned_weight[u] += (w1 - w2)
+                        new_score = score()
+                        assigned_weight[o] += (w1 - w2)
+                        assigned_weight[u] += (w2 - w1)
+                        if new_score < best_local:
+                            best_local = new_score
+                            best_pair = (i, j, w1, w2)
+                if best_pair is not None:
+                    i, j, w1, w2 = best_pair
+                    result[i][1], result[j][1] = result[j][1], result[i][1]
+                    assigned_weight[o] += (w2 - w1)
+                    assigned_weight[u] += (w1 - w2)
+                    owner_tasks[o].remove(i); owner_tasks[o].append(j)
+                    owner_tasks[u].remove(j); owner_tasks[u].append(i)
+                    cur_score = best_local
+                    improved = True
+                    break
+            if improved: break
+        if not improved: break
     grouped = {n: [] for n in names}
     for item in result: grouped[item[1]].append(tuple(item))
     final = []
@@ -439,6 +750,28 @@ def main() -> int:
     shots, ai, card = classify(files)
     if not shots:
         print("E001：未检测到 有效 报名截图"); return 1
+
+    names_env = os.environ.get("NAMES", "").strip()
+    names = [x.strip() for x in names_env.split(",") if x.strip()]
+    signup_ocr, unmatched, ocr_order = parse_signup_from_shots(shots, names)
+    preview_rows = [{"name": n, "count": int(signup_ocr.get(n, 0)), "matched": True} for n in ocr_order if signup_ocr.get(n, 0) > 0]
+    preview_rows.extend([{"name": n, "count": 5, "matched": False} for n in unmatched])
+    print("__OCR_PREVIEW__" + json.dumps({"rows": preview_rows}, ensure_ascii=False))
+
+    if os.environ.get("DAILY_ASSIGN_PREVIEW_ONLY", "0").strip() == "1":
+        if not preview_rows:
+            print("E004：OCR识别 - 无有效报名数量")
+            return 1
+        print(f"[识别] 已识别 {len(preview_rows)} 人，请在上方查看/调整后 继续")
+        print("（点 金银花，可以返回，重新OCR）")
+        return 0
+
+    confirmed_signup = parse_confirmed_signup(os.environ.get("DAILY_ASSIGN_CONFIRMED_SIGNUP", ""), names)
+    signup = confirmed_signup if confirmed_signup else signup_ocr
+    if sum(signup.values()) <= 0:
+        print("E004：OCR识别 - 无有效报名数量"); return 1
+    print(f"[确认] 报名结果已确认：{len(signup)} 人，总报名 {sum(signup.values())}")
+
     dl_dir = Path(os.environ.get("DOWNLOAD_DIR", str(Path.home() / "Downloads")))
     dl_dir.mkdir(parents=True, exist_ok=True)
     if ai is None and card is None:
@@ -451,17 +784,12 @@ def main() -> int:
         if mode == "mock": ok = mock_download(ai_path, card_path)
         elif mode == "real": ok = real_download(ai_path, card_path, ai_task_name(date.today()), card_task_name(date.today()))
         if not ok:
-            print("E002：自动下载失败 且 缺少 今天任务的表格"); return 1
+            print("E002：自动下载失败，请重试（或 手动下载 今天的任务表格）"); return 1
         ai, card = ai_path, card_path
     
-    print("\n[分配] 开始分配...")
+    print("\n\n[分配] 开始分配...")
     print("------------------------------")
-    
-    names_env = os.environ.get("NAMES", "").strip()
-    names = [x.strip() for x in names_env.split(",") if x.strip()]
-    signup, unmatched, ocr_order = parse_signup_from_shots(shots, names)
-    if sum(signup.values()) <= 0:
-        print("E004：OCR识别 - 无有效报名数量"); return 1
+
     method, mode = os.environ.get("DAILY_ASSIGN_METHOD", "page"), os.environ.get("DAILY_ASSIGN_MODE", "linked")
     ai_cap, card_cap = int(os.environ.get("DAILY_ASSIGN_AI_MAX", "200")), int(os.environ.get("DAILY_ASSIGN_CARD_MAX", "300"))
     ai_headers = ["任务名称", "子任务顺序", "任务ID", "子任务ID", "线上学生作业ID", "老师作业ID", "题单ID", "未测评页数", "总页数", "总评测数量", "任务链接"]
@@ -485,7 +813,8 @@ def main() -> int:
         w = t.pages if method == "page" else t.tags
         assigned_w[owner] = assigned_w.get(owner, 0) + w
     total_weight_all = sum(assigned_w.values())
-    for n in ocr_order:
+    display_order = ocr_order if ocr_order else list(signup.keys())
+    for n in display_order:
         signup_n = signup.get(n, 0)
         if signup_n == 0: continue
         signup_ratio = (signup_n / max(total_signup_all, 1) * 100.0)
@@ -496,7 +825,7 @@ def main() -> int:
     for bad in sorted(set(unmatched)): print(f"- {bad}: 报名 无法匹配 ⚠️")
     try: display_path = str(output.relative_to(Path.home()))
     except Exception: display_path = f"{output_dir.name}/{output.name}"
-    print(f"\n[下载] 👉 已生成：{display_path}\n")
+    print(f"\n\n👉 已生成：{display_path}\n\n")
     print("👉 任务已完成")
     return 0
 

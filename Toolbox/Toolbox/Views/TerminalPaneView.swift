@@ -16,6 +16,8 @@ struct TerminalPaneView: View {
     let onToggleZoom: () -> Void
     let onStart: () -> Void
     let onStop: () -> Void
+    let canStart: Bool
+    let startButtonTitle: String
 
 
 
@@ -43,17 +45,17 @@ struct TerminalPaneView: View {
                     .controlSize(.large)
                     .frame(minWidth: 110)
 
-                Button("开始", action: onStart)
+                Button(startButtonTitle, action: onStart)
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(isRunning)
+                    .disabled(isRunning || !canStart)
                     .controlSize(.large)
                     .frame(minWidth: 110)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 12)
         }
-        .frame(minHeight: 130)
+        .frame(minHeight: 80)
     }
 
     private var header: some View {

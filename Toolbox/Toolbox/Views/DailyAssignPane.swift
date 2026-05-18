@@ -12,15 +12,35 @@ struct DailyAssignSettings {
 struct DailyAssignPane: View {
     @Binding var files: [URL]
     @Binding var settings: DailyAssignSettings
+    @Binding var stage: DailyAssignStage
+    @Binding var rows: [DailyAssignSignupRow]
+    let names: [String]
+    let canConfirm: Bool
+    let isZoomed: Bool
+    let onToggleZoom: () -> Void
+    let onAdd: () -> Void
+    let onReset: () -> Void
+    let onRemove: (UUID) -> Void
 
     var body: some View {
+        VStack(spacing: 10) {
+            if stage == .confirming {
+                confirmPane
+            } else {
+                setupPane
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+    }
+
+    private var setupPane: some View {
         VStack(spacing: 10) {
             DailyAssignDropZoneView(files: $files)
                 .frame(height: 120)
 
             VStack(spacing: 0) {
                 HStack(alignment: .center, spacing: 0) {
-                    // Left Side: Pickers (Fixed width, trailing aligned)
                     VStack(alignment: .trailing, spacing: 16) {
                         Picker("", selection: $settings.allocationMethod) {
                             Text("按页分配").tag("page")
@@ -38,14 +58,11 @@ struct DailyAssignPane: View {
                         .labelsHidden()
                         .frame(width: 300)
                     }
-                    
+
                     Spacer().frame(width: 20)
-                    Divider()
-                        .frame(height: 60)
-                        .opacity(0.5)
+                    Divider().frame(height: 60).opacity(0.5)
                     Spacer().frame(width: 20)
 
-                    // Right Side: Inputs (Fixed width, leading aligned)
                     VStack(alignment: .leading, spacing: 16) {
                         HStack(spacing: 12) {
                             Text("AI最多可分配页数")
@@ -86,8 +103,112 @@ struct DailyAssignPane: View {
                     .stroke(Color.white.opacity(0.1), lineWidth: 1)
             )
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
+    }
+
+    private var confirmPane: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Text("报名结果确认")
+                    .font(.headline)
+                Spacer()
+                Button(action: onToggleZoom) {
+                    Image(systemName: isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                }
+                .buttonStyle(.borderless)
+                .help(isZoomed ? "恢复分栏" : "铺满右侧")
+            }
+
+            HStack(spacing: 18) {
+                Text("识别到 \(rows.count) 人")
+                Text("未匹配 \(rows.filter { !$0.matched }.count)")
+            }
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach($rows) { $row in
+                        HStack(spacing: 14) {
+                            Picker("", selection: $row.name) {
+                                ForEach(names, id: \.self) { name in
+                                    Text(name).tag(name)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 180)
+
+                            Picker("", selection: $row.count) {
+                                Text("2").tag(2)
+                                Text("3").tag(3)
+                                Text("5").tag(5)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 120)
+
+                            Group {
+                                if row.isUserAdded {
+                                    Text("新增")
+                                        .font(.caption2)
+                                        .foregroundColor(.orange)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .background(Capsule().fill(Color.orange.opacity(0.16)))
+                                } else if row.name != row.originalName || row.count != row.originalCount {
+                                    Text("已修改")
+                                        .font(.caption2)
+                                        .foregroundColor(.blue)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .background(Capsule().fill(Color.blue.opacity(0.16)))
+                                } else {
+                                    Text("　")
+                                        .font(.caption2)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .opacity(0)
+                                }
+                            }
+                            .frame(width: 62, alignment: .center)
+
+                            Button("删除") { onRemove(row.id) }
+                                .buttonStyle(.borderless)
+                                .foregroundColor(.red.opacity(0.85))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(row.matched ? Color.white.opacity(0.03) : Color.orange.opacity(0.12))
+                        )
+                    }
+                }
+            }
+            .frame(minHeight: 120, maxHeight: isZoomed ? .infinity : 240)
+
+            HStack(spacing: 16) {
+                Button("+ 添加报名人", action: onAdd)
+                Button("重置为OCR", action: onReset)
+            }
+            .buttonStyle(.bordered)
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            if !canConfirm {
+                Text("请先完成有效名单确认后再点击下方“继续”")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
     }
 }
 
@@ -108,7 +229,7 @@ private struct DailyAssignDropZoneView: View {
                     .onTapGesture { appendFromPasteboard() }
 
                 if files.isEmpty {
-                    Text("报名截图 拖到这里...")
+                    Text("报名截图/今日任务表 拖到这里...")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 } else {

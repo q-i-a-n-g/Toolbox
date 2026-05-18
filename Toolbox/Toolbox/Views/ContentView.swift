@@ -73,9 +73,35 @@ struct ContentView: View {
                                 textPane
                                 terminalPane(showEditorControls: false)
                             }
+                        } else if viewModel.dailyAssignStage == .confirming && viewModel.isDailyAssignConfirmPaneZoomed {
+                            DailyAssignPane(
+                                files: $viewModel.dailyAssignFiles,
+                                settings: $viewModel.dailyAssignSettings,
+                                stage: $viewModel.dailyAssignStage,
+                                rows: $viewModel.dailyAssignRows,
+                                names: viewModel.dailyAssignNames,
+                                canConfirm: viewModel.dailyAssignCanConfirm,
+                                isZoomed: viewModel.isDailyAssignConfirmPaneZoomed,
+                                onToggleZoom: viewModel.toggleDailyAssignConfirmPaneZoom,
+                                onAdd: viewModel.addDailyAssignRow,
+                                onReset: viewModel.resetDailyAssignRowsToOCR,
+                                onRemove: viewModel.removeDailyAssignRow
+                            )
                         } else {
                             VSplitView {
-                                DailyAssignPane(files: $viewModel.dailyAssignFiles, settings: $viewModel.dailyAssignSettings)
+                                DailyAssignPane(
+                                    files: $viewModel.dailyAssignFiles,
+                                    settings: $viewModel.dailyAssignSettings,
+                                    stage: $viewModel.dailyAssignStage,
+                                    rows: $viewModel.dailyAssignRows,
+                                    names: viewModel.dailyAssignNames,
+                                    canConfirm: viewModel.dailyAssignCanConfirm,
+                                    isZoomed: viewModel.isDailyAssignConfirmPaneZoomed,
+                                    onToggleZoom: viewModel.toggleDailyAssignConfirmPaneZoom,
+                                    onAdd: viewModel.addDailyAssignRow,
+                                    onReset: viewModel.resetDailyAssignRowsToOCR,
+                                    onRemove: viewModel.removeDailyAssignRow
+                                )
                                 terminalPane(showEditorControls: false)
                             }
                         }
@@ -133,6 +159,14 @@ struct ContentView: View {
         let toolID = viewModel.selectedTool.id
         let showHelp = toolID != "stitch-images" && toolID != "daily-assign" && toolID != "weekly-check"
         let showConfig = toolID != "stitch-images" && toolID != "download-images" && toolID != "daily-assign" && toolID != "weekly-check"
+        let canStart: Bool = {
+            if toolID == "daily-assign" {
+                if viewModel.dailyAssignStage == .confirming { return viewModel.dailyAssignCanConfirm }
+                return !viewModel.dailyAssignFiles.isEmpty
+            }
+            if toolID == "weekly-check" { return !viewModel.weeklyCheckFiles.isEmpty }
+            return true
+        }()
         return TerminalPaneView(
             outputText: viewModel.terminalText,
             isRunning: viewModel.isRunning,
@@ -148,7 +182,9 @@ struct ContentView: View {
             onConfig: viewModel.handleConfigButton,
             onToggleZoom: { viewModel.toggleZoom(for: .terminal) },
             onStart: viewModel.startSelectedTool,
-            onStop: viewModel.stopSelectedTool
+            onStop: viewModel.stopSelectedTool,
+            canStart: canStart,
+            startButtonTitle: toolID == "daily-assign" ? viewModel.dailyAssignStartButtonTitle : "开始"
         )
     }
 }

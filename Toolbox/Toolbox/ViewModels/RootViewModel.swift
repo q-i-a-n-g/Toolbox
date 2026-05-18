@@ -37,6 +37,23 @@ struct RenamerState {
     var history: RenameHistory?
 }
 
+enum DailyAssignStage {
+    case idle
+    case confirming
+    case readyToRun
+}
+
+struct DailyAssignSignupRow: Identifiable {
+    let id = UUID()
+    var name: String
+    var count: Int
+    var matched: Bool
+    var originalOrder: Int
+    var originalName: String
+    var originalCount: Int
+    var isUserAdded: Bool
+}
+
 @MainActor
 final class RootViewModel: ObservableObject {
     @Published var tools: [ScriptTool]
@@ -53,6 +70,10 @@ final class RootViewModel: ObservableObject {
     @Published var weeklyCheckFiles: [URL] = []
     @Published var dailyAssignFiles: [URL] = []
     @Published var dailyAssignSettings = DailyAssignSettings()
+    @Published var dailyAssignStage: DailyAssignStage = .idle
+    @Published var dailyAssignRows: [DailyAssignSignupRow] = []
+    @Published var dailyAssignNames: [String] = []
+    @Published var isDailyAssignConfirmPaneZoomed = false
     @Published var isSidebarVisible: Bool = true
     @Published private(set) var hiddenToolIDs: Set<String> = []
     @Published private(set) var sidebarOrder: [String] = []
@@ -64,6 +85,7 @@ final class RootViewModel: ObservableObject {
     private let sidebarOrderKey = "Toolbox.sidebar.order"
     private let fileStore = ToolFileStore()
     private var inputDraftByTool: [String: String] = [:]
+    private var dailyAssignPreviewRowsBackup: [DailyAssignSignupRow] = []
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -89,6 +111,24 @@ final class RootViewModel: ObservableObject {
 
     var shouldShowTextPane: Bool {
         editorMode != .hidden
+    }
+
+    var dailyAssignCanConfirm: Bool {
+        guard !dailyAssignRows.isEmpty else { return false }
+        let validCounts = Set([2, 3, 5])
+        var seen = Set<String>()
+        var total = 0
+        for row in dailyAssignRows {
+            let n = row.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !n.isEmpty, dailyAssignNames.contains(n), validCounts.contains(row.count), !seen.contains(n) else { return false }
+            seen.insert(n)
+            total += row.count
+        }
+        return total > 0
+    }
+
+    var dailyAssignStartButtonTitle: String {
+        dailyAssignStage == .confirming ? "继续" : "开始"
     }
 
     var isEditorEditable: Bool {
@@ -280,6 +320,29 @@ final class RootViewModel: ObservableObject {
             stopSelectedTool()
         }
 
+        if selectedTool.id == "daily-assign", dailyAssignFiles.isEmpty {
+            terminalText += "E001：未检测到 有效 报名截图\n"
+            return
+        }
+        if selectedTool.id == "weekly-check", weeklyCheckFiles.isEmpty {
+            terminalText += "[检查] 请先拖入已分配的线上任务表\n"
+            return
+        }
+
+        if selectedTool.id == "daily-assign", dailyAssignStage != .readyToRun {
+            if dailyAssignStage == .confirming {
+                guard dailyAssignCanConfirm else {
+                    terminalText += "[识别] 请先完成上方报名结果确认\n"
+                    return
+                }
+                sortDailyAssignRowsByNameList()
+                dailyAssignStage = .readyToRun
+            } else {
+                startDailyAssignPreview()
+                return
+            }
+        }
+
         // Ensure input ends with a newline to prevent shell reading issues (missing last line)
         var inputText = editorText
         if !inputText.isEmpty && !inputText.hasSuffix("\n") {
@@ -320,12 +383,19 @@ final class RootViewModel: ObservableObject {
             inputText = ""
         } else if selectedTool.id == "daily-assign" {
             let filesPath = dailyAssignFiles.map { $0.path }.joined(separator: "|")
+            let aiMax = min(max(1, dailyAssignSettings.aiMaxPages), 20_000)
+            let cardMax = min(max(1, dailyAssignSettings.cardMaxPages), 20_000)
+            let confirmedSignup = dailyAssignRows
+                .map { "\($0.name):\($0.count)" }
+                .joined(separator: "|")
             extraEnv["DAILY_ASSIGN_FILES"] = filesPath
             extraEnv["DAILY_ASSIGN_METHOD"] = dailyAssignSettings.allocationMethod
-            extraEnv["DAILY_ASSIGN_AI_MAX"] = "\(max(1, dailyAssignSettings.aiMaxPages))"
-            extraEnv["DAILY_ASSIGN_CARD_MAX"] = "\(max(1, dailyAssignSettings.cardMaxPages))"
+            extraEnv["DAILY_ASSIGN_AI_MAX"] = "\(aiMax)"
+            extraEnv["DAILY_ASSIGN_CARD_MAX"] = "\(cardMax)"
             extraEnv["DAILY_ASSIGN_MODE"] = dailyAssignSettings.allocationMode
             extraEnv["DAILY_ASSIGN_DOWNLOAD_MODE"] = "real"
+            extraEnv["DAILY_ASSIGN_PREVIEW_ONLY"] = "0"
+            extraEnv["DAILY_ASSIGN_CONFIRMED_SIGNUP"] = confirmedSignup
             extraEnv["DOWNLOAD_DIR"] = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?.path ?? ""
             extraEnv["OUTPUT_DIR"] = Bundle.main.bundleURL.deletingLastPathComponent().path
             if let ocrScript = Bundle.main.resourceURL?
@@ -365,7 +435,10 @@ final class RootViewModel: ObservableObject {
                         }
                     }
                     
-                    self.terminalText += filteredChunk
+                    let cleaned = self.handleDailyAssignPreviewOutputIfNeeded(filteredChunk)
+                    if !cleaned.isEmpty {
+                        self.terminalText += cleaned
+                    }
                 }
             },
             onExit: { [weak self] status in
@@ -378,6 +451,65 @@ final class RootViewModel: ObservableObject {
                 }
             }
         )
+    }
+
+    func resetDailyAssignRowsToOCR() {
+        dailyAssignRows = dailyAssignPreviewRowsBackup
+    }
+
+    func addDailyAssignRow() {
+        let first = dailyAssignNames.first ?? ""
+        let nextOrder = (dailyAssignRows.map(\.originalOrder).max() ?? -1) + 1
+        dailyAssignRows.append(DailyAssignSignupRow(
+            name: first,
+            count: 5,
+            matched: false,
+            originalOrder: nextOrder,
+            originalName: first,
+            originalCount: 5,
+            isUserAdded: true
+        ))
+    }
+
+    func removeDailyAssignRow(_ id: UUID) {
+        dailyAssignRows.removeAll { $0.id == id }
+    }
+
+    func mergeDuplicateDailyAssignRows() {
+        var merged: [String: (count: Int, matched: Bool, order: Int)] = [:]
+        for row in dailyAssignRows {
+            guard !row.name.isEmpty else { continue }
+            if let old = merged[row.name] {
+                merged[row.name] = (old.count + row.count, old.matched && row.matched, min(old.order, row.originalOrder))
+            } else {
+                merged[row.name] = (row.count, row.matched, row.originalOrder)
+            }
+        }
+        dailyAssignRows = merged.map { key, val in
+            let snapped = [2, 3, 5].min(by: { abs($0 - val.count) < abs($1 - val.count) }) ?? 5
+            return DailyAssignSignupRow(
+                name: key,
+                count: snapped,
+                matched: val.matched,
+                originalOrder: val.order,
+                originalName: key,
+                originalCount: snapped,
+                isUserAdded: false
+            )
+        }.sorted { $0.originalOrder < $1.originalOrder }
+    }
+
+    func sortDailyAssignRowsByOCR() {
+        dailyAssignRows.sort { $0.originalOrder < $1.originalOrder }
+    }
+
+    func sortDailyAssignRowsByNameList() {
+        let index = Dictionary(uniqueKeysWithValues: dailyAssignNames.enumerated().map { ($1, $0) })
+        dailyAssignRows.sort { (index[$0.name] ?? Int.max) < (index[$1.name] ?? Int.max) }
+    }
+
+    func toggleDailyAssignConfirmPaneZoom() {
+        isDailyAssignConfirmPaneZoomed.toggle()
     }
 
     func stopSelectedTool() {
@@ -429,14 +561,12 @@ final class RootViewModel: ObservableObject {
             "韩@“”正", "郝佳益", "李迪", "蹇文慧", "王子怡"
         ]
 
-        let buggyKeywords = Set(["校准名单", "可编辑", "英文逗号", "分隔", "名单中没", "有的", "不会分配", "任务"])
-
         var namesToUse = defaultNames
         if let namesLine = lines.first(where: { $0.hasPrefix("NAMES=") }) {
             let savedNames = namesLine.replacingOccurrences(of: "NAMES=", with: "")
                 .components(separatedBy: ",")
                 .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty && !buggyKeywords.contains($0) }
+                .filter { !$0.isEmpty }
             
             if !savedNames.isEmpty {
                 namesToUse = savedNames
@@ -467,27 +597,33 @@ final class RootViewModel: ObservableObject {
     }
 
     private func saveDailyAssignConfig(from text: String) throws {
-        let pattern = "\\{(.*?)\\}"
-        let regex = try NSRegularExpression(pattern: pattern, options: .dotMatchesLineSeparators)
-        let range = NSRange(location: 0, length: text.utf16.count)
-        
         var names: [String] = []
-        if let match = regex.firstMatch(in: text, options: [], range: range),
-           let contentRange = Range(match.range(at: 1), in: text) {
-            let content = text[contentRange]
+        if let left = text.firstIndex(of: "{"),
+           let right = text[left...].firstIndex(of: "}") {
+            let content = text[text.index(after: left)..<right]
             names = content
-                .components(separatedBy: CharacterSet(charactersIn: ",\n"))
+                .components(separatedBy: CharacterSet(charactersIn: ",，、;\n\r\t"))
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .map { $0.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "'", with: "") }
                 .filter { !$0.isEmpty }
-        } else {
-            // Updated regex to include special characters in 韩@“”正
-            let nameRegex = try NSRegularExpression(pattern: "[\\u4e00-\\u9fa5@“”]{1,10}")
-            names = nameRegex.matches(in: text, options: [], range: range).compactMap { match in
-                Range(match.range, in: text).map { String(text[$0]) }
+        }
+
+        if names.isEmpty {
+            throw NSError(
+                domain: "DailyAssignConfig",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "名单为空，请在大括号内填写至少 1 个姓名"]
+            )
+        }
+
+        var unique: [String] = []
+        var seen = Set<String>()
+        for name in names {
+            if seen.insert(name).inserted {
+                unique.append(name)
             }
         }
-        
-        let unique = Array(NSOrderedSet(array: names)) as? [String] ?? names
+
         let current = fileStore.loadConfigText(for: selectedTool)
         let kept = current.components(separatedBy: .newlines).filter { !$0.hasPrefix("NAMES=") }
         let merged = (["NAMES=" + unique.joined(separator: ",")] + kept).joined(separator: "\n")
@@ -521,6 +657,11 @@ final class RootViewModel: ObservableObject {
         }
         if tool.id == "daily-assign" {
             dailyAssignSettings = DailyAssignSettings()
+            dailyAssignStage = .idle
+            dailyAssignRows = []
+            dailyAssignPreviewRowsBackup = []
+            dailyAssignNames = loadDailyAssignNames()
+            isDailyAssignConfirmPaneZoomed = false
         }
     }
 
@@ -529,6 +670,10 @@ final class RootViewModel: ObservableObject {
         terminalText = ""
         weeklyCheckFiles = []
         dailyAssignFiles = []
+        dailyAssignStage = .idle
+        dailyAssignRows = []
+        dailyAssignPreviewRowsBackup = []
+        isDailyAssignConfirmPaneZoomed = false
         renamerState = RenamerState()
         
         if editorMode != .config && editorMode != .help {
@@ -630,5 +775,112 @@ final class RootViewModel: ObservableObject {
         renamerState.history = nil
         terminalText += "👉 撤销完成\n"
         refreshRenamerPreview()
+    }
+
+    private func startDailyAssignPreview() {
+        dailyAssignNames = loadDailyAssignNames()
+        terminalText += "[识别] 正在识别 报名信息...\n"
+        let configURL = fileStore.configURL(for: selectedTool)
+        let currentSessionID = UUID()
+        self.runSessionID = currentSessionID
+        isRunning = true
+        isTerminalFocused = true
+
+        let filesPath = dailyAssignFiles.map { $0.path }.joined(separator: "|")
+        var extraEnv: [String: String] = [
+            "DAILY_ASSIGN_FILES": filesPath,
+            "DAILY_ASSIGN_PREVIEW_ONLY": "1"
+        ]
+        if let ocrScript = Bundle.main.resourceURL?
+            .appendingPathComponent("Binaries", isDirectory: true)
+            .appendingPathComponent("ocr_vision.swift") {
+            extraEnv["OCR_VISION_SCRIPT"] = ocrScript.path
+        }
+        if let assignBin = Bundle.main.resourceURL?
+            .appendingPathComponent("Binaries", isDirectory: true)
+            .appendingPathComponent("check_main_pkg", isDirectory: true)
+            .appendingPathComponent("daily_assign_main_bin") {
+            extraEnv["DAILY_ASSIGN_BIN"] = assignBin.path
+        }
+
+        terminalService.start(
+            tool: selectedTool,
+            inputText: "",
+            configURL: configURL,
+            extraEnv: extraEnv,
+            onOutput: { [weak self] chunk in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    let cleaned = self.handleDailyAssignPreviewOutputIfNeeded(chunk)
+                    if !cleaned.isEmpty {
+                        self.terminalText += cleaned
+                    }
+                }
+            },
+            onExit: { [weak self] _ in
+                guard let self = self else { return }
+                Task { @MainActor in
+                    if self.runSessionID == currentSessionID {
+                        self.isRunning = false
+                    }
+                }
+            }
+        )
+    }
+
+    private func handleDailyAssignPreviewOutputIfNeeded(_ chunk: String) -> String {
+        guard selectedTool.id == "daily-assign" else { return chunk }
+        var kept: [String] = []
+        for line in chunk.components(separatedBy: .newlines) {
+            if line.hasPrefix("__OCR_PREVIEW__") {
+                if dailyAssignStage == .readyToRun {
+                    continue
+                }
+                let payload = String(line.dropFirst("__OCR_PREVIEW__".count))
+                if let data = payload.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let rows = json["rows"] as? [[String: Any]] {
+                    var parsed: [DailyAssignSignupRow] = []
+                    for (idx, row) in rows.enumerated() {
+                        let name = (row["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        let matched = row["matched"] as? Bool ?? true
+                        let count = row["count"] as? Int ?? 5
+                        let safeCount = [2, 3, 5].contains(count) ? count : 5
+                        parsed.append(DailyAssignSignupRow(
+                            name: name,
+                            count: safeCount,
+                            matched: matched,
+                            originalOrder: idx,
+                            originalName: name,
+                            originalCount: safeCount,
+                            isUserAdded: false
+                        ))
+                    }
+                    dailyAssignRows = parsed
+                    dailyAssignPreviewRowsBackup = parsed
+                    dailyAssignStage = .confirming
+                }
+            } else if !line.isEmpty {
+                kept.append(line)
+            }
+        }
+        return kept.isEmpty ? "" : kept.joined(separator: "\n") + "\n"
+    }
+
+    private func loadDailyAssignNames() -> [String] {
+        guard let tool = tools.first(where: { $0.id == "daily-assign" }) else { return [] }
+        let raw = fileStore.loadConfigText(for: tool)
+        for line in raw.components(separatedBy: .newlines) {
+            if line.hasPrefix("NAMES=") {
+                let names = line.replacingOccurrences(of: "NAMES=", with: "")
+                    .components(separatedBy: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                if !names.isEmpty {
+                    return names
+                }
+            }
+        }
+        return []
     }
 }

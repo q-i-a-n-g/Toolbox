@@ -9,7 +9,9 @@ final class ToolFileStore {
         }
 
         guard
-            let url = Bundle.main.url(forResource: tool.helpFileName, withExtension: nil, subdirectory: "Help"),
+            let url = Bundle.main.resourceURL?
+                .appendingPathComponent("Help", isDirectory: true)
+                .appendingPathComponent(tool.helpFileName),
             let text = try? String(contentsOf: url, encoding: .utf8)
         else {
             return "未找到帮助文档。"
@@ -38,7 +40,9 @@ final class ToolFileStore {
         let url = directory.appendingPathComponent(tool.configFileName)
 
         if !fileManager.fileExists(atPath: url.path) {
-            if let bundled = Bundle.main.url(forResource: tool.configFileName, withExtension: nil, subdirectory: "Configs") {
+            if let bundled = Bundle.main.resourceURL?
+                .appendingPathComponent("Configs", isDirectory: true)
+                .appendingPathComponent(tool.configFileName) {
                 try? fileManager.copyItem(at: bundled, to: url)
             } else {
                 try? "".write(to: url, atomically: true, encoding: .utf8)
@@ -51,7 +55,9 @@ final class ToolFileStore {
     }
 
     private func migrateConfigIfNeeded(for tool: ScriptTool, configURL: URL) {
-        guard let bundledURL = Bundle.main.url(forResource: tool.configFileName, withExtension: nil, subdirectory: "Configs"),
+        guard let bundledURL = Bundle.main.resourceURL?
+                .appendingPathComponent("Configs", isDirectory: true)
+                .appendingPathComponent(tool.configFileName),
               let bundledText = try? String(contentsOf: bundledURL, encoding: .utf8),
               let currentText = try? String(contentsOf: configURL, encoding: .utf8)
         else {
