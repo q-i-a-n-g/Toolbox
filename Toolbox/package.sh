@@ -21,6 +21,8 @@ rm -f build/arm64/Toolbox.app/Contents/Resources/Binaries/ffmpeg_intel.zip
 rm -f build/arm64/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip
 # Strip symbols
 strip -x build/arm64/Toolbox.app/Contents/Resources/Binaries/ffmpeg 2>/dev/null || true
+# Re-sign after resource slimming; removing sealed resources invalidates the Xcode signature.
+codesign --force --deep --sign - --timestamp=none build/arm64/Toolbox.app
 
 echo "Zipping arm64 app..."
 pushd build/arm64 > /dev/null
@@ -39,6 +41,8 @@ rm -f build/x86_64/Toolbox.app/Contents/Resources/Binaries/ffmpeg_intel.zip
 rm -f build/x86_64/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip
 # Strip symbols
 strip -x build/x86_64/Toolbox.app/Contents/Resources/Binaries/ffmpeg 2>/dev/null || true
+# Re-sign after resource slimming; removing sealed resources invalidates the Xcode signature.
+codesign --force --deep --sign - --timestamp=none build/x86_64/Toolbox.app
 
 echo "Zipping x86_64 app..."
 pushd build/x86_64 > /dev/null

@@ -106,92 +106,105 @@ struct DailyAssignPane: View {
     }
 
     private var confirmPane: some View {
-        VStack(spacing: 10) {
-            HStack {
+        VStack(spacing: 8) {
+            HStack(spacing: 14) {
                 Text("报名结果确认")
                     .font(.headline)
+
+                Text("识别到 \(rows.count) 人")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                // let unmatchedCount = rows.filter { !$0.matched }.count
+                // if unmatchedCount > 0 {
+                //     Text("未匹配 \(unmatchedCount)")
+                //         .font(.subheadline)
+                //         .foregroundColor(.secondary)
+                // }
+
                 Spacer()
+
+                Button("+ 添加报名人", action: onAdd)
+                Button("重置为OCR", action: onReset)
+
                 Button(action: onToggleZoom) {
                     Image(systemName: isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                 }
                 .buttonStyle(.borderless)
                 .help(isZoomed ? "恢复分栏" : "铺满右侧")
             }
+            .buttonStyle(.bordered)
 
-            HStack(spacing: 18) {
-                Text("识别到 \(rows.count) 人")
-                Text("未匹配 \(rows.filter { !$0.matched }.count)")
-            }
-            .font(.subheadline)
-            .foregroundColor(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach($rows) { $row in
-                        HStack(spacing: 14) {
-                            Picker("", selection: $row.name) {
-                                ForEach(names, id: \.self) { name in
-                                    Text(name).tag(name)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach($rows) { $row in
+                            HStack(spacing: 14) {
+                                Picker("", selection: $row.name) {
+                                    ForEach(names, id: \.self) { name in
+                                        Text(name).tag(name)
+                                    }
                                 }
-                            }
-                            .labelsHidden()
-                            .frame(width: 180)
+                                .labelsHidden()
+                                .frame(width: 180)
 
-                            Picker("", selection: $row.count) {
-                                Text("2").tag(2)
-                                Text("3").tag(3)
-                                Text("5").tag(5)
-                            }
-                            .pickerStyle(.segmented)
-                            .frame(width: 120)
-
-                            Group {
-                                if row.isUserAdded {
-                                    Text("新增")
-                                        .font(.caption2)
-                                        .foregroundColor(.orange)
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 3)
-                                        .background(Capsule().fill(Color.orange.opacity(0.16)))
-                                } else if row.name != row.originalName || row.count != row.originalCount {
-                                    Text("已修改")
-                                        .font(.caption2)
-                                        .foregroundColor(.blue)
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 3)
-                                        .background(Capsule().fill(Color.blue.opacity(0.16)))
-                                } else {
-                                    Text("　")
-                                        .font(.caption2)
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 3)
-                                        .opacity(0)
+                                Picker("", selection: $row.count) {
+                                    Text("2").tag(2)
+                                    Text("3").tag(3)
+                                    Text("5").tag(5)
                                 }
-                            }
-                            .frame(width: 62, alignment: .center)
+                                .pickerStyle(.segmented)
+                                .frame(width: 120)
 
-                            Button("删除") { onRemove(row.id) }
-                                .buttonStyle(.borderless)
-                                .foregroundColor(.red.opacity(0.85))
+                                Group {
+                                    if row.isUserAdded {
+                                        Text("新增")
+                                            .font(.caption2)
+                                            .foregroundColor(.orange)
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 3)
+                                            .background(Capsule().fill(Color.orange.opacity(0.16)))
+                                    } else if row.name != row.originalName || row.count != row.originalCount {
+                                        Text("已修改")
+                                            .font(.caption2)
+                                            .foregroundColor(.blue)
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 3)
+                                            .background(Capsule().fill(Color.blue.opacity(0.16)))
+                                    } else {
+                                        Text("　")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 3)
+                                            .opacity(0)
+                                    }
+                                }
+                                .frame(width: 62, alignment: .center)
+
+                                Button("删除") { onRemove(row.id) }
+                                    .buttonStyle(.borderless)
+                                    .foregroundColor(.red.opacity(0.85))
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(row.matched ? Color.white.opacity(0.03) : Color.orange.opacity(0.12))
+                            )
+                            .id(row.id)
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(row.matched ? Color.white.opacity(0.03) : Color.orange.opacity(0.12))
-                        )
+                    }
+                }
+                .onChange(of: rows.count) { _ in
+                    guard let last = rows.last, last.isUserAdded else { return }
+                    DispatchQueue.main.async {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
                     }
                 }
             }
-            .frame(minHeight: 120, maxHeight: isZoomed ? .infinity : 240)
-
-            HStack(spacing: 16) {
-                Button("+ 添加报名人", action: onAdd)
-                Button("重置为OCR", action: onReset)
-            }
-            .buttonStyle(.bordered)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .frame(minHeight: 180, maxHeight: isZoomed ? .infinity : 360)
 
             if !canConfirm {
                 Text("请先完成有效名单确认后再点击下方“继续”")

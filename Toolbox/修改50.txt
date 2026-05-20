@@ -1,0 +1,56 @@
+1.AI&答题卡-检查 的最新测试结果如下：
+            - 上传文件数: 1
+            ==================================================
+            - 正在扫描上传文件...
+            ==================================================
+            拼链接 ...                               已生成 ✅
+
+            ...下载更新 数据源表...
+            AI.xlsx                                  ✅
+            分数.xlsx                                ✅
+            答题卡_AI.xlsx                           ✅
+            答题卡_分数.xlsx                         ✅
+
+            分数识别错误或忽略 ...                   已生成 ✅ (5行)
+            固定批改错误或忽略 ...                   已生成 ✅ (0行)
+            题目框错误+忽略超过3个 ...               已生成 ✅ (7行)
+            BadCase ...                              已生成 ✅ (605行)
+            答题卡_分数识别错误或忽略 ...            已生成 ✅ (1行)
+            答题卡_AI_BadCase ...                    已生成 ✅ (33行)
+            答题卡_AI_错误次数≥3（星标参考） ...    已生成 ✅ (3行)
+            AI_错误次数≥3（星标参考） ...           已生成 ✅ (54行)
+            ===================================================
+            👉 已完成：result.xlsx ✅
+
+      1）把提示对齐
+            - 可以调整“分数识别错误或忽略 ...                   已生成 ✅ (5行)”这种提示中间的空格数量，
+            让右边的“已生成 ✅ (5行)”这种文字全部左对齐
+      2）修改终端提示
+            - “👉 已完成：result.xlsx ✅” -> “👉 已生成：Desktop/result.xlsx ✅”
+      3）拖拽区的默认高度改为1/3，终端区占2/3
+
+2. 每日分配
+      - 调整OCR识别结果面板的默认高度占2/3，终端占比1/3，检查是否实现了
+      - 检查终端提示，有多个连续空行的，都改成一个空行
+
+3. 批量打开链接、图片批量下载，这2个都这样修改
+      - 复制到文本框的文本的末尾有大量空行时，空行也会复制过来，需要自动去掉末尾的空行（不影响继续在末尾手动添加内容），其他地方的空行不要去掉
+      - 在“帮助”内容的下面增加这些内容：
+            （空行）
+            -----------------------------------------------
+            真实链接，可测试：
+            （空行）
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/p7fxZVJ64NDRDWzZKjrqXC.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oordGuRfowGGQ4xY7VnjyB.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/yK8qXhdThfuLRB9B5NxMyS.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/HVDEqXc3mKV84iiYp4uwfD.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/9fUvGnVYnusiiCj5PJVV9M.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oNtn9AAxFoZFHqPpUGDa5P.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/3XGBCoZX6zEjz4Rh3KWLwF.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/rKN3fEtZW3dQtsizarp3s8.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/RmQVLkrxgm7JB9aKZ45jgd.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/zJAHHoEvLQtRTUSDDEeMfT.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oDdjU9CMguTmXZke5KzHz8.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/7bHcD5STZLNF5jbrna2KCE.jpg
+            ......
+4. 不要改动其他提示、功能，最小化改动，然后打一版 Intel 包，参考：Toolbox/AGENTS.md

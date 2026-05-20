@@ -9,6 +9,7 @@ trap 'rm -rf "$TMP"' EXIT
 cp "$ROOT/../每日分配/AI_待分配.xlsx" "$TMP/AI_待分配.xlsx"
 cp "$ROOT/../每日分配/答题卡_待分配.xlsx" "$TMP/答题卡_待分配.xlsx"
 cp "$ROOT/../每日分配/AI.png" "$TMP/王哲12.png"
+printf "王哲 5\n李橙橙 3\n" > "$TMP/王哲12.txt"
 
 # case1: only screenshot + mock download success
 OUT1="$TMP/out1"

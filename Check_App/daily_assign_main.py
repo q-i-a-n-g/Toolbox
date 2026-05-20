@@ -5,10 +5,8 @@ import re
 import shutil
 import sys
 import json
-import urllib.request
 import subprocess
 import warnings
-import zipfile
 import time
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -177,64 +175,62 @@ def _wait_search_match(page, task_name: str, timeout_ms: int = 20000) -> tuple[b
     return False, sample
 
 
-def _click_export_button(page) -> bool:
-    selectors = [
-        'button:has-text("导 出"), button:has-text("导出")',
-        'button.ant-btn-primary:has-text("导")',
-        '.ant-space button.ant-btn-primary'
-    ]
-    for sel in selectors:
+def _visible_button_by_text(page, wanted: str):
+    locs = page.locator("button")
+    for i in range(min(locs.count(), 80)):
         try:
-            locs = page.locator(sel)
-            for i in range(min(locs.count(), 8)):
-                btn = locs.nth(i)
-                txt = (btn.inner_text(timeout=500) or "").strip()
-                if "导" in txt and "出" in txt:
-                    if btn.is_visible() and btn.is_enabled():
-                        btn.scroll_into_view_if_needed()
-                        btn.click(timeout=8000, force=True)
-                        return True
+            btn = locs.nth(i)
+            txt = re.sub(r"\s+", "", btn.inner_text(timeout=300) or "")
+            if txt == wanted and btn.is_visible() and btn.is_enabled():
+                return btn
         except Exception:
             continue
+    return None
+
+
+def _close_open_modals(page):
     try:
-        ok = page.evaluate(
+        page.evaluate(
             """() => {
-              const btns = Array.from(document.querySelectorAll('button.ant-btn-primary, button.ant-btn'));
-              const target = btns.find(b => {
-                const t = (b.innerText || '').replace(/\\s+/g, '');
-                return t.includes('导出') && !b.disabled;
-              });
-              if (!target) return false;
-              target.scrollIntoView();
-              target.click();
-              return true;
+              for (const btn of document.querySelectorAll('.ant-modal-close')) {
+                const modal = btn.closest('.ant-modal');
+                if (modal && getComputedStyle(modal).display !== 'none') btn.click();
+              }
             }"""
         )
-        return bool(ok)
+    except Exception:
+        pass
+
+
+def _click_export_button(page) -> bool:
+    try:
+        btn = _visible_button_by_text(page, "导出")
+        if btn is None:
+            return False
+        btn.scroll_into_view_if_needed()
+        btn.click(timeout=8000, force=True)
+        return True
     except Exception:
         return False
 
 
 def _download_one_table(page, url: str, task_name: str, target: Path, label: str) -> bool:
     try:
-        print(f"[下载] {label} 正在打开页面...")
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(2000) 
+        page.wait_for_timeout(1200)
     except Exception as e:
         print(f"E002：{label} 页面打开失败 ({e})")
         return False
     
     page.bring_to_front()
+    _close_open_modals(page)
     
     # 1. Input Task Name
     try:
-        # Clear existing modals
-        page.evaluate("() => { const b = document.querySelector('.ant-modal-close'); if(b) b.click(); }")
-        
         input_sel = 'input#name, input[placeholder*="任务名"]'
         page.wait_for_selector(input_sel, timeout=20000)
         page.fill(input_sel, "")
-        page.type(input_sel, task_name, delay=20)
+        page.type(input_sel, task_name, delay=8)
     except Exception:
         print(f"E002：无法在 {label} 页面输入任务名")
         _take_screenshot(page, f"{label}_input_fail")
@@ -242,15 +238,13 @@ def _download_one_table(page, url: str, task_name: str, target: Path, label: str
             
     # 2) 搜索
     try:
-        print(f"[下载] {label} 触发搜索...")
-        search_btn = page.get_by_role("button", name=re.compile(r"搜\s*索")).first
-        if search_btn.is_visible():
+        search_btn = _visible_button_by_text(page, "搜索")
+        if search_btn is not None:
             search_btn.click()
         else:
             page.keyboard.press("Enter")
         
-        # Critical: Wait for loading to clear to ensure table data is for the SEARCHED task
-        page.wait_for_timeout(1000)
+        page.wait_for_timeout(800)
         try:
             loading = page.locator('.ant-spin-spinning, .ant-loading, .ant-table-loading')
             if loading.count() > 0:
@@ -265,54 +259,35 @@ def _download_one_table(page, url: str, task_name: str, target: Path, label: str
         return False
     
     # 3) 导出
-    print(f"[下载] {label} 准备导出...")
-    try:
-        # Use exact text match for "导出" button
-        export_btn = page.get_by_role("button", name=re.compile(r"导\s*出")).first
-        export_btn.scroll_into_view_if_needed()
-        export_btn.click(timeout=8000)
-    except Exception:
+    if not _click_export_button(page):
         print(f"E002：{label} 点击导出按钮失败")
         _take_screenshot(page, f"{label}_export_fail")
         return False
         
     # 4) 确认弹窗并下载
     try:
-        print(f"[下载] {label} 等待确认...")
-        page.wait_for_timeout(1500) # Wait for modal animation
+        modal = page.locator(".ant-modal:visible").last
+        modal.wait_for(state="visible", timeout=10000)
+        page.wait_for_timeout(300)
         
         with page.expect_download(timeout=60000) as download_info:
-            # Try multiple common "Confirm" button variants
-            confirm_selectors = [
-                'button.ant-btn-primary:has-text("确 定")',
-                'button.ant-btn-primary:has-text("确定")',
-                '.ant-modal-footer button.ant-btn-primary',
-                'button:has-text("确 定")',
-                'button:has-text("确定")'
-            ]
-            clicked = False
-            for sel in confirm_selectors:
-                try:
-                    btn = page.locator(sel).last
-                    if btn.is_visible(timeout=2000):
-                        btn.click(force=True, timeout=3000)
-                        clicked = True
-                        break
-                except Exception: continue
-            
-            if not clicked:
+            confirm = modal.locator('.ant-modal-footer button.ant-btn-primary').last
+            if confirm.count() > 0 and confirm.is_visible(timeout=3000):
+                confirm.click(force=True, timeout=5000)
+            else:
                 page.keyboard.press("Enter")
         
         download = download_info.value
-        new_file = download.path()
-        
-        # Verify and save
-        if not os.path.exists(new_file) or os.path.getsize(new_file) < 500:
+        tmp_target = target.with_suffix(target.suffix + ".download")
+        if tmp_target.exists():
+            tmp_target.unlink()
+        download.save_as(str(tmp_target))
+        if not tmp_target.exists() or tmp_target.stat().st_size < 500:
             print(f"E002：{label} 下载文件不完整")
             return False
-                
-        if os.path.exists(str(target)): os.remove(str(target))
-        shutil.copy(new_file, str(target))
+        if target.exists():
+            target.unlink()
+        tmp_target.replace(target)
         
         # Strict content check to ensure it's not the "wrong" file
         if not validate_downloaded_task(target, task_name):
@@ -342,7 +317,8 @@ def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: s
         with sync_playwright() as p:
             browser_context = p.chromium.launch_persistent_context(
                 user_data_dir=user_data_dir, executable_path=chrome_path,
-                headless=False, no_viewport=True, args=["--remote-debugging-port=9222", "--start-maximized"]
+                headless=False, no_viewport=True, accept_downloads=True,
+                args=["--remote-debugging-port=9222", "--start-maximized"]
             )
             page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
 
@@ -705,12 +681,63 @@ def assign(tasks: List[TaskRow], signup: Dict[str, int], weight_key: str, carry:
     return final, assigned_weight
 
 
+def task_weight_sum(tasks: List[TaskRow], weight_key: str) -> float:
+    total = 0.0
+    for t in tasks:
+        w = t.pages if weight_key == "page" else t.tags
+        total += w if w > 0 else 1.0
+    return total
+
+
+def split_signup_for_linked_mode(ai_tasks: List[TaskRow], card_tasks: List[TaskRow], signup: Dict[str, int], weight_key: str) -> tuple[Dict[str, int], Dict[str, int]]:
+    names = sorted(signup.keys())
+    if len(names) <= 1 or not ai_tasks or not card_tasks:
+        return signup, signup
+
+    ai_total = task_weight_sum(ai_tasks, weight_key)
+    card_total = task_weight_sum(card_tasks, weight_key)
+    if ai_total <= 0 or card_total <= 0:
+        return signup, signup
+
+    total_signup = sum(signup.values())
+    target_ai_signup = total_signup * ai_total / (ai_total + card_total)
+
+    best_subset: set[str] | None = None
+    best_key = (float("inf"), float("inf"), float("inf"))
+    n = len(names)
+    # The signup list is small in practice; exhaustive search gives a stable owner partition.
+    for mask in range(1, (1 << n) - 1):
+        subset = {names[i] for i in range(n) if mask & (1 << i)}
+        subset_signup = sum(signup[name] for name in subset)
+        key = (
+            abs(subset_signup - target_ai_signup),
+            abs(len(subset) - n * ai_total / (ai_total + card_total)),
+            len(subset),
+        )
+        if key < best_key:
+            best_key = key
+            best_subset = subset
+
+    if not best_subset:
+        return signup, signup
+
+    ai_signup = {name: signup[name] for name in names if name in best_subset}
+    card_signup = {name: signup[name] for name in names if name not in best_subset}
+    return ai_signup, card_signup
+
+
 def ai_task_name(today: date) -> str:
-    return "260511-260512"
+    yesterday = today - timedelta(days=1)
+    return f"{yesterday:%y%m%d}-{today:%y%m%d}"
 
 
 def card_task_name(today: date) -> str:
-    return "0507-0513答题卡周期评测"
+    # The saved production examples use Thursday-Wednesday cycles:
+    # 2026-05-07..2026-05-13 and 2026-05-14..2026-05-20.
+    days_since_thursday = (today.weekday() - 3) % 7
+    start = today - timedelta(days=days_since_thursday)
+    end = start + timedelta(days=6)
+    return f"{start:%m%d}-{end:%m%d}答题卡周期评测"
 
 
 def delivery_text(today: date) -> str:
@@ -770,7 +797,7 @@ def main() -> int:
     signup = confirmed_signup if confirmed_signup else signup_ocr
     if sum(signup.values()) <= 0:
         print("E004：OCR识别 - 无有效报名数量"); return 1
-    print(f"[确认] 报名结果已确认：{len(signup)} 人，总报名 {sum(signup.values())}")
+    print(f"[确认] 报名结果已确认：{len(signup)} 人")
 
     dl_dir = Path(os.environ.get("DOWNLOAD_DIR", str(Path.home() / "Downloads")))
     dl_dir.mkdir(parents=True, exist_ok=True)
@@ -787,16 +814,24 @@ def main() -> int:
             print("E002：自动下载失败，请重试（或 手动下载 今天的任务表格）"); return 1
         ai, card = ai_path, card_path
     
-    print("\n\n[分配] 开始分配...")
+    print("\n\n\n[分配] 开始分配...")
     print("------------------------------")
 
     method, mode = os.environ.get("DAILY_ASSIGN_METHOD", "page"), os.environ.get("DAILY_ASSIGN_MODE", "linked")
     ai_cap, card_cap = int(os.environ.get("DAILY_ASSIGN_AI_MAX", "200")), int(os.environ.get("DAILY_ASSIGN_CARD_MAX", "300"))
     ai_headers = ["任务名称", "子任务顺序", "任务ID", "子任务ID", "线上学生作业ID", "老师作业ID", "题单ID", "未测评页数", "总页数", "总评测数量", "任务链接"]
     card_headers = ai_headers[:]
-    ai_rows, card_rows, carry = [], [], None
-    if ai: ai_headers, ai_tasks = read_tasks(ai, ai_cap); ai_rows, carry = assign(ai_tasks, signup, method)
-    if card: card_headers, card_tasks = read_tasks(card, card_cap); card_rows, _ = assign(card_tasks, signup, method, carry if mode == "linked" else None)
+    ai_rows, card_rows = [], []
+    ai_tasks, card_tasks = [], []
+    if ai: ai_headers, ai_tasks = read_tasks(ai, ai_cap)
+    if card: card_headers, card_tasks = read_tasks(card, card_cap)
+    if mode == "linked":
+        ai_signup, card_signup = split_signup_for_linked_mode(ai_tasks, card_tasks, signup, method)
+        if ai_tasks: ai_rows, _ = assign(ai_tasks, ai_signup, method)
+        if card_tasks: card_rows, _ = assign(card_tasks, card_signup, method)
+    else:
+        if ai_tasks: ai_rows, _ = assign(ai_tasks, signup, method)
+        if card_tasks: card_rows, _ = assign(card_tasks, signup, method)
     output_dir = Path(os.environ.get("OUTPUT_DIR", str(Path.cwd())))
     output, tmp = output_dir / "分配表.xlsx", (output_dir / "分配表.xlsx").with_suffix(".tmp.xlsx")
     try:
@@ -813,7 +848,10 @@ def main() -> int:
         w = t.pages if method == "page" else t.tags
         assigned_w[owner] = assigned_w.get(owner, 0) + w
     total_weight_all = sum(assigned_w.values())
-    display_order = ocr_order if ocr_order else list(signup.keys())
+    display_order = list(ocr_order) if ocr_order else []
+    for n in signup:
+        if n not in display_order:
+            display_order.append(n)
     for n in display_order:
         signup_n = signup.get(n, 0)
         if signup_n == 0: continue
@@ -825,7 +863,7 @@ def main() -> int:
     for bad in sorted(set(unmatched)): print(f"- {bad}: 报名 无法匹配 ⚠️")
     try: display_path = str(output.relative_to(Path.home()))
     except Exception: display_path = f"{output_dir.name}/{output.name}"
-    print(f"\n\n👉 已生成：{display_path}\n\n")
+    print(f"\n\n------------------------------\n👉 已生成：{display_path}\n\n\n")
     print("👉 任务已完成")
     return 0
 

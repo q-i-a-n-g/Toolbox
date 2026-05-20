@@ -256,9 +256,9 @@ final class RootViewModel: ObservableObject {
         editorMode = .help
         if selectedTool.id == "daily-assign" {
             editorText = """
-                - 全自动：只拖入 报名截图 ，则 `自动下载` 今日的任务表（AI、答题卡），并自动生成 分配表.xlsx
+                - 自动下载：只拖入 报名截图 ，则 `自动下载` 今日的任务表（AI、答题卡），并自动生成 分配表.xlsx
 
-                - 半自动：拖入 `报名截图 + 手动下载的表格`，适用于需要 `手动下载` 任务表的情况
+                - 手动下载：拖入 `报名截图 + 手动下载的表格`，适用于需要 `手动下载` 任务表的情况
 
                 - AI、答题卡独立分配：区分AI、答题卡，每个报名人都分到AI、答题卡（按比例）
 
@@ -830,6 +830,9 @@ final class RootViewModel: ObservableObject {
 
     private func handleDailyAssignPreviewOutputIfNeeded(_ chunk: String) -> String {
         guard selectedTool.id == "daily-assign" else { return chunk }
+        if !chunk.contains("__OCR_PREVIEW__") {
+            return chunk
+        }
         var kept: [String] = []
         for line in chunk.components(separatedBy: .newlines) {
             if line.hasPrefix("__OCR_PREVIEW__") {
@@ -860,11 +863,11 @@ final class RootViewModel: ObservableObject {
                     dailyAssignPreviewRowsBackup = parsed
                     dailyAssignStage = .confirming
                 }
-            } else if !line.isEmpty {
+            } else {
                 kept.append(line)
             }
         }
-        return kept.isEmpty ? "" : kept.joined(separator: "\n") + "\n"
+        return kept.joined(separator: "\n")
     }
 
     private func loadDailyAssignNames() -> [String] {

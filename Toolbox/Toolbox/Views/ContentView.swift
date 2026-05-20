@@ -102,7 +102,15 @@ struct ContentView: View {
                                     onReset: viewModel.resetDailyAssignRowsToOCR,
                                     onRemove: viewModel.removeDailyAssignRow
                                 )
+                                .frame(
+                                    minHeight: viewModel.dailyAssignStage == .confirming ? 300 : 220,
+                                    idealHeight: viewModel.dailyAssignStage == .confirming ? 400 : 260
+                                )
                                 terminalPane(showEditorControls: false)
+                                    .frame(
+                                        minHeight: 84,
+                                        idealHeight: viewModel.dailyAssignStage == .confirming ? 200 : 180
+                                    )
                             }
                         }
                     } else if viewModel.zoomTarget == .text && viewModel.shouldShowTextPane {
