@@ -39,13 +39,15 @@
             （空行）
             -----------------------------------------------
             真实链接，可测试：
-            （空行）
-            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/p7fxZVJ64NDRDWzZKjrqXC.jpg
-            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oordGuRfowGGQ4xY7VnjyB.jpg
-            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/yK8qXhdThfuLRB9B5NxMyS.jpg
-            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/HVDEqXc3mKV84iiYp4uwfD.jpg
-            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/9fUvGnVYnusiiCj5PJVV9M.jpg
-            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oNtn9AAxFoZFHqPpUGDa5P.jpg
+            
+            01 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/p7fxZVJ64NDRDWzZKjrqXC.jpg
+            02 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oordGuRfowGGQ4xY7VnjyB.jpg
+            03 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/yK8qXhdThfuLRB9B5NxMyS.jpg
+            
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/HVDEqXc3mKV84iiYp4uwfD.jpg 04
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/9fUvGnVYnusiiCj5PJVV9M.jpg 05
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oNtn9AAxFoZFHqPpUGDa5P.jpg 06
+            （多余文字）
             https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/3XGBCoZX6zEjz4Rh3KWLwF.jpg
             https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/rKN3fEtZW3dQtsizarp3s8.jpg
             https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/RmQVLkrxgm7JB9aKZ45jgd.jpg
@@ -53,4 +55,5 @@
             https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oDdjU9CMguTmXZke5KzHz8.jpg
             https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/7bHcD5STZLNF5jbrna2KCE.jpg
             ......
-4. 不要改动其他提示、功能，最小化改动，然后打一版 Intel 包，参考：Toolbox/AGENTS.md
+4.上次打包的apple芯片的功能异常：AI&答题卡-检查，无法自动下载；每日分配，名单错误，OCR识别到0个人
+5. 不要改动其他提示、功能，最小化改动，然后打一版 apple 包，参考：Toolbox/AGENTS.md
