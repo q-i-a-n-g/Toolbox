@@ -46,10 +46,8 @@ Toolbox/DerivedData/
 
 # Generic Data & Screenshots
 **/*.xlsx
-**/*.png
 
 # Exceptions: Keep Assets and README images
-!**/Assets.xcassets/**/*.png
 !**/README.md
 !**/修改*.txt
 !**/ffmpeg_arm.zip
@@ -60,4 +58,10 @@ Toolbox/Toolbox/Resources/Binaries/ffmpeg_arm64
 Toolbox/Toolbox/Resources/Binaries/ffmpeg_x86_64
 
 # Daily Distribution Folder
-每日分配/
+每日分配/**/*.js
+每日分配/**/*.css
+每日分配/**/*.htm
+每日分配/**/*.txt
+每日分配/**/*.xlsx
+每日分配/**/*.jpg
+每日分配/.DS_Store
