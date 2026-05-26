@@ -8,6 +8,7 @@ struct PlainTextEditorView: NSViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
     let isEditable: Bool
+    var trimTrailingBlankLinesOnPaste: Bool = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
@@ -22,6 +23,7 @@ struct PlainTextEditorView: NSViewRepresentable {
 
         let textView = PlainTextNSTextView(frame: .zero)
         textView.delegate = context.coordinator
+        textView.trimTrailingBlankLinesOnPaste = trimTrailingBlankLinesOnPaste
         textView.isEditable = isEditable
         textView.isSelectable = true
         textView.isRichText = false
@@ -39,6 +41,7 @@ struct PlainTextEditorView: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.lineFragmentPadding = 10
         textView.textContainerInset = NSSize(width: 0, height: 10)
+        applyLeftAlignment(to: textView)
         
         scrollView.documentView = textView
         return scrollView
@@ -49,7 +52,9 @@ struct PlainTextEditorView: NSViewRepresentable {
 
         if textView.string != text {
             textView.string = text
+            applyLeftAlignment(to: textView)
         }
+        textView.trimTrailingBlankLinesOnPaste = trimTrailingBlankLinesOnPaste
 
         if textView.isEditable != isEditable {
             textView.isEditable = isEditable
@@ -63,6 +68,18 @@ struct PlainTextEditorView: NSViewRepresentable {
                 }
                 isFocused = false
             }
+        }
+    }
+
+    private func applyLeftAlignment(to textView: NSTextView) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .left
+        textView.defaultParagraphStyle = paragraph
+        textView.alignment = .left
+        textView.typingAttributes[.paragraphStyle] = paragraph
+        let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
+        if fullRange.length > 0 {
+            textView.textStorage?.addAttribute(.paragraphStyle, value: paragraph, range: fullRange)
         }
     }
 
@@ -169,7 +186,28 @@ struct TerminalTextView: NSViewRepresentable {
 }
 
 final class PlainTextNSTextView: NSTextView {
+    var trimTrailingBlankLinesOnPaste = false
     override var acceptsFirstResponder: Bool { true }
+
+    override func paste(_ sender: Any?) {
+        guard trimTrailingBlankLinesOnPaste,
+              let pasted = NSPasteboard.general.string(forType: .string)
+        else {
+            super.paste(sender)
+            return
+        }
+        insertText(pasted.trimmingTrailingBlankLines(), replacementRange: selectedRange())
+    }
+}
+
+private extension String {
+    func trimmingTrailingBlankLines() -> String {
+        var lines = components(separatedBy: .newlines)
+        while let last = lines.last, last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.removeLast()
+        }
+        return lines.joined(separator: "\n")
+    }
 }
 
 final class TerminalNSTextView: NSTextView {

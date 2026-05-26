@@ -64,7 +64,9 @@ struct ContentView: View {
                         } else {
                             VSplitView {
                                 WeeklyCheckPane(files: $viewModel.weeklyCheckFiles)
+                                    .frame(minHeight: 120, idealHeight: 170)
                                 terminalPane(showEditorControls: false)
+                                    .frame(minHeight: 220, idealHeight: 340)
                             }
                         }
                     } else if viewModel.selectedTool.id == "daily-assign" {
@@ -103,15 +105,25 @@ struct ContentView: View {
                                     onRemove: viewModel.removeDailyAssignRow
                                 )
                                 .frame(
-                                    minHeight: viewModel.dailyAssignStage == .confirming ? 300 : 220,
-                                    idealHeight: viewModel.dailyAssignStage == .confirming ? 400 : 260
+                                    minHeight: viewModel.dailyAssignStage == .confirming ? 360 : 220,
+                                    idealHeight: viewModel.dailyAssignStage == .confirming ? 460 : 260
                                 )
                                 terminalPane(showEditorControls: false)
                                     .frame(
                                         minHeight: 84,
-                                        idealHeight: viewModel.dailyAssignStage == .confirming ? 200 : 180
+                                        idealHeight: viewModel.dailyAssignStage == .confirming ? 190 : 180
                                     )
                             }
+                        }
+                    } else if viewModel.selectedTool.id == "stitch-images" {
+                        VSplitView {
+                            StitchImagesPane(
+                                state: $viewModel.stitchImagesState,
+                                onFolderDrop: viewModel.updateStitchImagesFolder
+                            )
+                            .frame(minHeight: 230, idealHeight: 280)
+                            terminalPane(showEditorControls: false)
+                                .frame(minHeight: 160, idealHeight: 260)
                         }
                     } else if viewModel.zoomTarget == .text && viewModel.shouldShowTextPane {
                         textPane
@@ -144,23 +156,39 @@ struct ContentView: View {
     }
 
     private var textPane: some View {
-        TextInputPane(
-            title: viewModel.editorTitle,
-            text: Binding(
-                get: { viewModel.editorText },
-                set: { viewModel.updateEditorText($0) }
-            ),
-            isFocused: $viewModel.isEditorFocused,
-            isEditable: viewModel.isEditorEditable,
-            showHelpButton: viewModel.selectedTool.id != "weekly-check" && viewModel.selectedTool.id != "daily-assign",
-            showConfigButton: viewModel.selectedTool.id != "download-images" && viewModel.selectedTool.id != "weekly-check" && viewModel.selectedTool.id != "daily-assign",
-            helpButtonTitle: viewModel.helpButtonTitle,
-            configButtonTitle: viewModel.configButtonTitle,
-            isZoomed: viewModel.zoomTarget == .text,
-            onHelp: viewModel.toggleHelp,
-            onConfig: viewModel.handleConfigButton,
-            onToggleZoom: { viewModel.toggleZoom(for: .text) }
-        )
+        Group {
+            if viewModel.editorMode == .config && viewModel.selectedTool.id == "open-links" {
+                OpenLinksConfigPane(
+                    batchSize: $viewModel.openLinksConfig.batchSize,
+                    dedupeLinks: $viewModel.openLinksConfig.dedupeLinks,
+                    helpButtonTitle: viewModel.helpButtonTitle,
+                    configButtonTitle: viewModel.configButtonTitle,
+                    onHelp: viewModel.toggleHelp,
+                    onConfig: viewModel.handleConfigButton
+                )
+            } else if viewModel.editorMode == .config && viewModel.selectedTool.id == "daily-assign" {
+                DailyAssignConfigPane(names: $viewModel.dailyAssignConfigNames)
+            } else {
+                TextInputPane(
+                    title: viewModel.editorTitle,
+                    text: Binding(
+                        get: { viewModel.editorText },
+                        set: { viewModel.updateEditorText($0) }
+                    ),
+                    isFocused: $viewModel.isEditorFocused,
+                    isEditable: viewModel.isEditorEditable,
+                    showHelpButton: viewModel.selectedTool.id != "weekly-check" && viewModel.selectedTool.id != "daily-assign",
+                    showConfigButton: viewModel.selectedTool.id != "download-images" && viewModel.selectedTool.id != "weekly-check" && viewModel.selectedTool.id != "daily-assign",
+                    helpButtonTitle: viewModel.helpButtonTitle,
+                    configButtonTitle: viewModel.configButtonTitle,
+                    isZoomed: viewModel.zoomTarget == .text,
+                    trimTrailingBlankLinesOnPaste: viewModel.selectedTool.id == "open-links" || viewModel.selectedTool.id == "download-images",
+                    onHelp: viewModel.toggleHelp,
+                    onConfig: viewModel.handleConfigButton,
+                    onToggleZoom: { viewModel.toggleZoom(for: .text) }
+                )
+            }
+        }
     }
 
     private func terminalPane(showEditorControls: Bool) -> some View {
@@ -173,6 +201,7 @@ struct ContentView: View {
                 return !viewModel.dailyAssignFiles.isEmpty
             }
             if toolID == "weekly-check" { return !viewModel.weeklyCheckFiles.isEmpty }
+            if toolID == "stitch-images" { return viewModel.stitchImagesState.folderURL != nil }
             return true
         }()
         return TerminalPaneView(

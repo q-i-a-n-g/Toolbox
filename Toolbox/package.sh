@@ -9,6 +9,26 @@ SCHEME="${TOOLBOX_SCHEME:-ScriptToolbox}"
 mkdir -p build
 rm -rf build/arm64 build/x86_64
 
+thin_binary_if_possible() {
+    local arch="$1"
+    local path="$2"
+    if [ -f "$path" ] && lipo -info "$path" >/dev/null 2>&1; then
+        if lipo -info "$path" | grep -q "$arch"; then
+            lipo -thin "$arch" "$path" -output "$path.thin" && mv "$path.thin" "$path"
+            chmod +x "$path"
+        fi
+    fi
+}
+
+thin_check_pkg() {
+    local arch="$1"
+    local app="$2"
+    local pkg="$app/Contents/Resources/Binaries/check_main_pkg"
+    # Do not lipo-thin PyInstaller executables after build: their PKG archive is
+    # appended to the Mach-O and thinning breaks the embedded archive offsets.
+    thin_binary_if_possible "$arch" "$pkg/_internal/playwright/driver/node"
+}
+
 echo "Building for Apple Silicon (arm64)..."
 xcodebuild -project Toolbox.xcodeproj -scheme "$SCHEME" -configuration Release \
     ARCHS="arm64" ONLY_ACTIVE_ARCH=NO \
@@ -21,6 +41,7 @@ rm -f build/arm64/Toolbox.app/Contents/Resources/Binaries/ffmpeg_intel.zip
 rm -f build/arm64/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip
 # Strip symbols
 strip -x build/arm64/Toolbox.app/Contents/Resources/Binaries/ffmpeg 2>/dev/null || true
+thin_check_pkg arm64 build/arm64/Toolbox.app
 # Re-sign after resource slimming; removing sealed resources invalidates the Xcode signature.
 codesign --force --deep --sign - --timestamp=none build/arm64/Toolbox.app
 
@@ -41,6 +62,7 @@ rm -f build/x86_64/Toolbox.app/Contents/Resources/Binaries/ffmpeg_intel.zip
 rm -f build/x86_64/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip
 # Strip symbols
 strip -x build/x86_64/Toolbox.app/Contents/Resources/Binaries/ffmpeg 2>/dev/null || true
+thin_check_pkg x86_64 build/x86_64/Toolbox.app
 # Re-sign after resource slimming; removing sealed resources invalidates the Xcode signature.
 codesign --force --deep --sign - --timestamp=none build/x86_64/Toolbox.app
 

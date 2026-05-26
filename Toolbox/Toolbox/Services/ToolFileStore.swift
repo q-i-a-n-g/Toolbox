@@ -4,20 +4,20 @@ final class ToolFileStore {
     private let fileManager = FileManager.default
 
     func loadHelpText(for tool: ScriptTool) -> String {
+        if
+            let url = Bundle.main.resourceURL?
+                .appendingPathComponent("Help", isDirectory: true)
+                .appendingPathComponent(tool.helpFileName),
+            let text = try? String(contentsOf: url, encoding: .utf8),
+            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return text
+        }
+
         if let helpText = tool.helpText, !helpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return helpText
         }
 
-        guard
-            let url = Bundle.main.resourceURL?
-                .appendingPathComponent("Help", isDirectory: true)
-                .appendingPathComponent(tool.helpFileName),
-            let text = try? String(contentsOf: url, encoding: .utf8)
-        else {
-            return "未找到帮助文档。"
-        }
-
-        return text
+        return "未找到帮助文档。"
     }
 
     func loadConfigText(for tool: ScriptTool) -> String {

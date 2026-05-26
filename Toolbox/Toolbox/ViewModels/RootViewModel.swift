@@ -54,6 +54,16 @@ struct DailyAssignSignupRow: Identifiable {
     var isUserAdded: Bool
 }
 
+struct OpenLinksConfig {
+    var batchSize: Int = 10
+    var dedupeLinks: Bool = true
+}
+
+struct StitchImagesState {
+    var folderURL: URL?
+    var mode: String = "1"
+}
+
 @MainActor
 final class RootViewModel: ObservableObject {
     @Published var tools: [ScriptTool]
@@ -73,6 +83,9 @@ final class RootViewModel: ObservableObject {
     @Published var dailyAssignStage: DailyAssignStage = .idle
     @Published var dailyAssignRows: [DailyAssignSignupRow] = []
     @Published var dailyAssignNames: [String] = []
+    @Published var dailyAssignConfigNames: [String] = []
+    @Published var openLinksConfig = OpenLinksConfig()
+    @Published var stitchImagesState = StitchImagesState()
     @Published var isDailyAssignConfirmPaneZoomed = false
     @Published var isSidebarVisible: Bool = true
     @Published private(set) var hiddenToolIDs: Set<String> = []
@@ -187,7 +200,7 @@ final class RootViewModel: ObservableObject {
                 self.isTerminalFocused = true
             } else if tool.usesTextInput {
                 self.isEditorFocused = true
-            } else if tool.id != "daily-assign" {
+            } else if tool.id != "daily-assign" && tool.id != "stitch-images" {
                 // If it's a terminal-only tool, auto-start it (which also focuses terminal)
                 self.startSelectedTool()
             }
@@ -255,33 +268,35 @@ final class RootViewModel: ObservableObject {
         }
         editorMode = .help
         if selectedTool.id == "daily-assign" {
-            editorText = """
-                - 自动下载：只拖入 报名截图 ，则 `自动下载` 今日的任务表（AI、答题卡），并自动生成 分配表.xlsx
-
-                - 手动下载：拖入 `报名截图 + 手动下载的表格`，适用于需要 `手动下载` 任务表的情况
-
-                - AI、答题卡独立分配：区分AI、答题卡，每个报名人都分到AI、答题卡（按比例）
-
-                - AI+答题卡一起分配：不区分AI、答题卡，合在一起分，有些人只分到AI，有些人只分到答题卡
-"""
+            editorText = [
+                "- 全自动：只拖入 报名截图 ，则 `自动下载` 今日的任务表（AI、答题卡），并自动生成 分配表.xlsx",
+                "",
+                "- 半自动：拖入 `报名截图 + 手动下载的表格`，适用于需要 `手动下载` 任务表的情况",
+                "",
+                "- AI、答题卡独立分配：区分AI、答题卡，每个报名人都分到AI、答题卡（按比例）",
+                "",
+                "- AI+答题卡一起分配：不区分AI、答题卡，合在一起分，有些人只分到AI，有些人只分到答题卡",
+                ""
+            ].joined(separator: "\n")
         } else if selectedTool.id == "weekly-check" {
-            editorText = """
-                ## 功能
-
-                    - 自动打开统计详情页，下载 `AI、答题卡` 的统计详情表
-
-                    - 自动处理下载的表格，生成 `result.xlsx` 供检查。
-
-                ## 使用
-
-                    - 把已分配的线上任务表(`AI`或`AI+答题卡`)，复制一份，拖到拖拽区，点 [开始] 按钮
-
-                ## Tips
-
-                    - 首次运行，自动下载时，`需要登录`，之后就不用了
-
-                    - 无需手动删除旧文件（下载的、生成的），可`自动覆盖`
-"""
+            editorText = [
+                "## 功能",
+                "",
+                "    - 自动打开统计详情页，下载 `AI、答题卡` 的统计详情表",
+                "",
+                "    - 自动处理下载的表格，生成 `AI_check.xlsx` 供检查。",
+                "",
+                "## 使用",
+                "",
+                "    - 把已分配的线上任务表(`AI`或`AI+答题卡`)，复制一份，拖到拖拽区，点 [开始] 按钮",
+                "",
+                "## Tips",
+                "",
+                "    - 首次运行，自动下载时，`需要登录`，之后就不用了",
+                "",
+                "    - 无需手动删除旧文件（下载的、生成的），可`自动覆盖`",
+                ""
+            ].joined(separator: "\n")
         } else {
             editorText = fileStore.loadHelpText(for: selectedTool)
         }
@@ -291,7 +306,9 @@ final class RootViewModel: ObservableObject {
         if editorMode == .config {
             do {
                 if selectedTool.id == "daily-assign" {
-                    try saveDailyAssignConfig(from: editorText)
+                    try saveDailyAssignConfigNames(dailyAssignConfigNames)
+                } else if selectedTool.id == "open-links" {
+                    try saveOpenLinksConfig()
                 } else {
                     try fileStore.saveConfigText(editorText, for: selectedTool)
                 }
@@ -307,7 +324,11 @@ final class RootViewModel: ObservableObject {
         }
         editorMode = .config
         if selectedTool.id == "daily-assign" {
-            editorText = loadDailyAssignConfigTemplate()
+            dailyAssignConfigNames = loadDailyAssignNames()
+            editorText = ""
+        } else if selectedTool.id == "open-links" {
+            openLinksConfig = loadOpenLinksConfig()
+            editorText = ""
         } else {
             editorText = fileStore.loadConfigText(for: selectedTool)
         }
@@ -410,6 +431,14 @@ final class RootViewModel: ObservableObject {
                 extraEnv["DAILY_ASSIGN_BIN"] = assignBin.path
             }
             inputText = ""
+        } else if selectedTool.id == "stitch-images" {
+            guard let folderURL = stitchImagesState.folderURL else {
+                terminalText += "[图片拼接] 请先拖入目标文件夹\n"
+                isRunning = false
+                return
+            }
+            extraEnv["TARGET_DIR"] = folderURL.path
+            extraEnv["STACK_MODE_CHOICE"] = stitchImagesState.mode
         }
 
         terminalService.start(
@@ -558,7 +587,7 @@ final class RootViewModel: ObservableObject {
             "李橙橙", "符于娜", "刘雨菲", "阎思宇", "王哲",
             "崔雅琪", "李旻羲", "汪哲锐", "李梦洁", "来晨",
             "王国通", "马壮", "郭小雨", "李梦园", "段凯莉",
-            "韩@“”正", "郝佳益", "李迪", "蹇文慧", "王子怡"
+            "韩正", "郝佳益", "李迪", "蹇文慧", "王子怡"
         ]
 
         var namesToUse = defaultNames
@@ -596,6 +625,37 @@ final class RootViewModel: ObservableObject {
         return resultLines.joined(separator: "\n")
     }
 
+    private func loadOpenLinksConfig() -> OpenLinksConfig {
+        let raw = fileStore.loadConfigText(for: selectedTool)
+        var config = OpenLinksConfig()
+        for line in raw.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.hasPrefix("#"), let eq = trimmed.firstIndex(of: "=") else { continue }
+            let key = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
+            let value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+            if key == "BATCH_SIZE", let intValue = Int(value) {
+                config.batchSize = max(1, min(intValue, 200))
+            } else if key == "DEDUPE_LINKS" {
+                config.dedupeLinks = value != "0"
+            }
+        }
+        return config
+    }
+
+    private func saveOpenLinksConfig() throws {
+        let batch = max(1, min(openLinksConfig.batchSize, 200))
+        let dedupe = openLinksConfig.dedupeLinks ? "1" : "0"
+        let text = """
+        # 每批打开多少个链接
+        BATCH_SIZE=\(batch)
+
+        # 打开前先去重：1 = 去重，0 = 不去重
+        DEDUPE_LINKS=\(dedupe)
+        """
+        try fileStore.saveConfigText(text, for: selectedTool)
+        openLinksConfig.batchSize = batch
+    }
+
     private func saveDailyAssignConfig(from text: String) throws {
         var names: [String] = []
         if let left = text.firstIndex(of: "{"),
@@ -628,6 +688,39 @@ final class RootViewModel: ObservableObject {
         let kept = current.components(separatedBy: .newlines).filter { !$0.hasPrefix("NAMES=") }
         let merged = (["NAMES=" + unique.joined(separator: ",")] + kept).joined(separator: "\n")
         try fileStore.saveConfigText(merged, for: selectedTool)
+    }
+
+    private func saveDailyAssignConfigNames(_ rawNames: [String]) throws {
+        let names = rawNames
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if names.isEmpty {
+            throw NSError(
+                domain: "DailyAssignConfig",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "名单为空，请至少填写 1 个姓名"]
+            )
+        }
+
+        var unique: [String] = []
+        var seen = Set<String>()
+        for name in names {
+            if seen.insert(name).inserted {
+                unique.append(name)
+            }
+        }
+
+        let current = fileStore.loadConfigText(for: selectedTool)
+        let kept = current.components(separatedBy: .newlines).filter { !$0.hasPrefix("NAMES=") }
+        let merged = (["NAMES=" + unique.joined(separator: ",")] + kept).joined(separator: "\n")
+        try fileStore.saveConfigText(merged, for: selectedTool)
+        dailyAssignNames = unique
+        dailyAssignConfigNames = unique
+    }
+
+    func updateStitchImagesFolder(_ url: URL) {
+        stitchImagesState.folderURL = url
+        isTerminalFocused = true
     }
 
     private func restoreSidebarState() {
@@ -663,6 +756,9 @@ final class RootViewModel: ObservableObject {
             dailyAssignNames = loadDailyAssignNames()
             isDailyAssignConfirmPaneZoomed = false
         }
+        if tool.id == "stitch-images" {
+            stitchImagesState = StitchImagesState()
+        }
     }
 
     func clearAllToolInputs() {
@@ -675,6 +771,7 @@ final class RootViewModel: ObservableObject {
         dailyAssignPreviewRowsBackup = []
         isDailyAssignConfirmPaneZoomed = false
         renamerState = RenamerState()
+        stitchImagesState = StitchImagesState()
         
         if editorMode != .config && editorMode != .help {
             editorText = ""
@@ -884,6 +981,11 @@ final class RootViewModel: ObservableObject {
                 }
             }
         }
-        return []
+        return [
+            "李橙橙", "符于娜", "刘雨菲", "阎思宇", "王哲",
+            "崔雅琪", "李旻羲", "汪哲锐", "李梦洁", "来晨",
+            "王国通", "马壮", "郭小雨", "李梦园", "段凯莉",
+            "韩正", "郝佳益", "李迪", "蹇文慧", "王子怡"
+        ]
     }
 }

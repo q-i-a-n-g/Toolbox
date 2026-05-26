@@ -160,7 +160,7 @@ def _take_screenshot(page, name: str):
         print(f"[截图] 失败: {e}")
 
 
-def _wait_search_match(page, task_name: str, timeout_ms: int = 20000) -> tuple[bool, List[str]]:
+def _wait_search_match(page, task_name: str, timeout_ms: int = 12000) -> tuple[bool, List[str]]:
     expect = normalize_task_text(task_name)
     elapsed = 0
     sample: List[str] = []
@@ -244,17 +244,20 @@ def _download_one_table(page, url: str, task_name: str, target: Path, label: str
         else:
             page.keyboard.press("Enter")
         
-        page.wait_for_timeout(800)
+        page.wait_for_timeout(300)
         try:
             loading = page.locator('.ant-spin-spinning, .ant-loading, .ant-table-loading')
             if loading.count() > 0:
-                loading.first.wait_for(state="hidden", timeout=15000)
+                loading.first.wait_for(state="hidden", timeout=6000)
         except: pass
     except: pass
     
-    ok_filter, _ = _wait_search_match(page, task_name, timeout_ms=20000)
+    ok_filter, sample = _wait_search_match(page, task_name, timeout_ms=12000)
     if not ok_filter:
-        print(f"E002：{label} 搜索结果匹配失败（期望：{task_name}）")
+        if label == "答题卡":
+            print("今天没有答题卡")
+        else:
+            print(f"E002：{label} 搜索结果匹配失败（期望：{task_name}）")
         _take_screenshot(page, f"{label}_search_fail")
         return False
     
@@ -267,12 +270,12 @@ def _download_one_table(page, url: str, task_name: str, target: Path, label: str
     # 4) 确认弹窗并下载
     try:
         modal = page.locator(".ant-modal:visible").last
-        modal.wait_for(state="visible", timeout=10000)
-        page.wait_for_timeout(300)
+        modal.wait_for(state="visible", timeout=5000)
+        page.wait_for_timeout(120)
         
         with page.expect_download(timeout=60000) as download_info:
             confirm = modal.locator('.ant-modal-footer button.ant-btn-primary').last
-            if confirm.count() > 0 and confirm.is_visible(timeout=3000):
+            if confirm.count() > 0 and confirm.is_visible(timeout=1200):
                 confirm.click(force=True, timeout=5000)
             else:
                 page.keyboard.press("Enter")
@@ -511,23 +514,60 @@ def run_vision_ocr(image_path: Path) -> str:
 
 def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[str, int], List[str], List[str]]:
     out, unmatched, order = {}, [], []
-    noise = {"所有人", "完成", "周五", "周一", "周二", "周三", "周四", "周六", "周日", "评测", "比例", "请大家", "今天", "任务", "表格", "下载", "报名", "自动", "👉", "人数", "约有", "需在"}
+    noise = {"所有人", "完成", "周五", "周一", "周二", "周三", "周四", "周六", "周日", "评测", "比例", "请大家", "今天", "任务", "表格", "下载", "报名", "自动", "👉", "人数", "约有", "需在", "评测组"}
+
+    def remember(name: str, count: int):
+        if count not in (2, 3, 5):
+            return
+        if name not in out:
+            order.append(name)
+        out[name] = count
+        if name in unmatched:
+            unmatched.remove(name)
+
+    def parse_count_near(text: str, start: int, end: int) -> int | None:
+        left = max(0, start - 8)
+        right = min(len(text), end + 12)
+        segment = text[left:right]
+        nums = [int(x) for x in re.findall(r"(?<!\d)([235])(?!\d)", segment)]
+        if nums:
+            return nums[0]
+        return None
+
     for shot in shots:
         text_file = shot.with_suffix(".txt")
         text = text_file.read_text(encoding="utf-8", errors="ignore") if text_file.exists() else run_vision_ocr(shot)
+        compact = re.sub(r"\s+", "", text)
+
+        for name in names:
+            visible_name = name.replace("@“”", "")
+            patterns = {name, visible_name}
+            if visible_name == "符于娜":
+                patterns.update({"符手娜", "符干娜", "符千娜"})
+            if visible_name == "刘雨菲":
+                patterns.update({"刘兩菲", "刘兩霏", "刘雨霏"})
+            for pattern in patterns:
+                if not pattern:
+                    continue
+                for m in re.finditer(re.escape(pattern), compact):
+                    cnt = parse_count_near(compact, m.start(), m.end())
+                    if cnt:
+                        remember(name, cnt)
+                        break
+                if name in out:
+                    break
+
         for raw_name, cnt_s in re.findall(r"([\u4e00-\u9fa5@\u201c\u201d\u2018\u2019\u0022\u0027\s]{2,12})[^\d\u4e00-\u9fa5]{0,10}(\d+)", text):
             norm = normalize_name(raw_name, names)
             if not norm:
                 pure = "".join(re.findall(r"[\u4e00-\u9fa5]", raw_name))
-                if len(pure) < 2 or len(pure) > 6 or any(n in pure for n in noise): continue
-                if not any(lev(pure, n.replace("@“”", "")) <= 2 for n in names): continue
+                if len(pure) < 2 or len(pure) > 4 or any(n in pure for n in noise): continue
+                if not any(lev(pure, n.replace("@“”", "")) <= 1 for n in names): continue
                 if pure not in unmatched and pure not in out: unmatched.append(pure)
                 continue
             cnt = int(cnt_s)
             if cnt > 0:
-                if norm not in out: order.append(norm)
-                out[norm] = cnt
-                if norm in unmatched: unmatched.remove(norm)
+                remember(norm, cnt)
     return out, unmatched, order
 
 
@@ -814,7 +854,7 @@ def main() -> int:
             print("E002：自动下载失败，请重试（或 手动下载 今天的任务表格）"); return 1
         ai, card = ai_path, card_path
     
-    print("\n\n\n[分配] 开始分配...")
+    print("\n[分配] 开始分配...")
     print("------------------------------")
 
     method, mode = os.environ.get("DAILY_ASSIGN_METHOD", "page"), os.environ.get("DAILY_ASSIGN_MODE", "linked")
@@ -863,7 +903,7 @@ def main() -> int:
     for bad in sorted(set(unmatched)): print(f"- {bad}: 报名 无法匹配 ⚠️")
     try: display_path = str(output.relative_to(Path.home()))
     except Exception: display_path = f"{output_dir.name}/{output.name}"
-    print(f"\n\n------------------------------\n👉 已生成：{display_path}\n\n\n")
+    print(f"\n------------------------------\n👉 已生成：{display_path}\n")
     print("👉 任务已完成")
     return 0
 

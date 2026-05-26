@@ -173,34 +173,34 @@ check_bin ffmpeg
 check_bin sips
 check_bin ls
 
-echo "======================================"
-echo "[1] 上下 两两 拼接"
-echo "[2] 上下 三三 拼接"
-echo "[3] 左右 两两 拼接"
 choice="${STACK_MODE_CHOICE:-}"
 if [[ -z "$choice" ]]; then
+  echo "======================================"
+  echo "[1] 上下 两两 拼接"
+  echo "[2] 上下 三三 拼接"
+  echo "[3] 左右 两两 拼接"
   read -r -p "请输入选项 1 / 2 / 3，然后回车： " choice
-else
-  echo "使用配置中的模式：$choice"
 fi
 
 mode=""
 group_size=0
 position_labels=()
+mode_label=""
 
 case "$choice" in
-  1) mode="v2"; group_size=2; position_labels=("上" "下") ;;
-  2) mode="v3"; group_size=3; position_labels=("上" "中" "下") ;;
-  3) mode="h2"; group_size=2; position_labels=("左" "右") ;;
+  1) mode="v2"; group_size=2; position_labels=("上" "下"); mode_label="上下 两两 拼接" ;;
+  2) mode="v3"; group_size=3; position_labels=("上" "中" "下"); mode_label="上下 三三 拼接" ;;
+  3) mode="h2"; group_size=2; position_labels=("左" "右"); mode_label="左右 两两 拼接" ;;
   *) echo "输入无效，程序退出。"; exit 1 ;;
 esac
+echo "拼接方式：$mode_label"
 
 target_input="${TARGET_DIR:-}"
 if [[ -z "$target_input" ]]; then
   echo "把待处理 图片 文件夹拖入此终端，并 回车 :"
   read -r target_input
 else
-  echo "使用配置中的图片文件夹：$target_input"
+  echo "目标文件夹：$target_input"
 fi
 target_dir="$(normalize_path "$target_input")"
 
@@ -218,6 +218,7 @@ while IFS= read -r f; do
 done < <(collect_images_natural_sorted "$target_dir")
 
 total=${#images[@]}
+echo "检测到图片：${total} 张"
 if (( total < group_size )); then
   echo "图片数量不足，至少需要 ${group_size} 张。"
   exit 1
@@ -285,9 +286,8 @@ if (( ${#batch_pids[@]} > 0 )); then
   flush_batch
 fi
 
-echo "======================================"
-echo "处理完成"
-echo "已生成 ${processed} 张图片"
+echo "------------------------------"
+echo "已生成：${processed} 张图片"
 if (( failed > 0 )); then
   echo "拼接失败 ${failed} 组"
 fi

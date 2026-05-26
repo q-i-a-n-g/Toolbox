@@ -242,7 +242,7 @@ private struct DailyAssignDropZoneView: View {
                     .onTapGesture { appendFromPasteboard() }
 
                 if files.isEmpty {
-                    Text("报名截图/今日任务表 拖到这里...")
+                    Text("报名截图 拖到这里...")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 } else {
@@ -320,5 +320,128 @@ private struct DailyAssignDropZoneView: View {
             merged.append(url)
         }
         files = merged
+    }
+}
+
+struct StitchImagesPane: View {
+    @Binding var state: StitchImagesState
+    let onFolderDrop: (URL) -> Void
+
+    var body: some View {
+        VStack(spacing: 14) {
+            StitchFolderDropZone(folderURL: state.folderURL, onDrop: onFolderDrop)
+                .frame(height: 105)
+
+            HStack(spacing: 16) {
+                stitchModeButton(title: "上下\n两两拼接", icon: "rectangle.split.2x1", mode: "1")
+                stitchModeButton(title: "上下\n三三拼接", icon: "rectangle.split.3x1", mode: "2")
+                stitchModeButton(title: "左右\n两两拼接", icon: "rectangle.split.1x2", mode: "3")
+            }
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func stitchModeButton(title: String, icon: String, mode: String) -> some View {
+        let selected = state.mode == mode
+        return Button {
+            state.mode = mode
+        } label: {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 28, weight: .regular))
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .frame(width: 118, height: 88)
+            .foregroundColor(selected ? .accentColor : .primary)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(selected ? Color.accentColor.opacity(0.14) : Color(nsColor: .controlBackgroundColor).opacity(0.42))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(selected ? Color.accentColor.opacity(0.75) : Color.white.opacity(0.14), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(title.replacingOccurrences(of: "\n", with: ""))
+    }
+}
+
+private struct StitchFolderDropZone: View {
+    let folderURL: URL?
+    let onDrop: (URL) -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isHovering ? Color.accentColor : Color.secondary.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [6]))
+                .background(isHovering ? Color.accentColor.opacity(0.05) : Color.clear)
+
+            VStack(spacing: 7) {
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 30, weight: .regular))
+                    .foregroundColor(isHovering ? .accentColor : .secondary)
+                    .onTapGesture { appendFromPasteboard() }
+
+                if let url = folderURL {
+                    Text(url.lastPathComponent)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(url.path)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else {
+                    Text("目标文件夹 拖到这里...")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isHovering) { providers in
+            appendFromProviders(providers)
+            return true
+        }
+        .onPasteCommand(of: [UTType.fileURL]) { providers in
+            appendFromProviders(providers)
+        }
+    }
+
+    private func appendFromPasteboard() {
+        let classes: [AnyClass] = [NSURL.self]
+        guard let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL] else { return }
+        appendFirstFolder(urls)
+    }
+
+    private func appendFromProviders(_ providers: [NSItemProvider]) {
+        for provider in providers {
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url else { return }
+                DispatchQueue.main.async {
+                    appendFirstFolder([url])
+                }
+            }
+        }
+    }
+
+    private func appendFirstFolder(_ urls: [URL]) {
+        for url in urls {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                onDrop(url)
+                return
+            }
+        }
     }
 }

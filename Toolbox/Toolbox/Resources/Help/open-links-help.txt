@@ -13,3 +13,22 @@ https://example.com/c note
 配置说明：
 - `BATCH_SIZE=10`
   每批打开多少个链接后暂停，等待你按回车继续。
+
+-----------------------------------------------
+真实链接，可测试：
+
+01 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/p7fxZVJ64NDRDWzZKjrqXC.jpg
+02 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oordGuRfowGGQ4xY7VnjyB.jpg
+03 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/yK8qXhdThfuLRB9B5NxMyS.jpg
+
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/HVDEqXc3mKV84iiYp4uwfD.jpg 04
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/9fUvGnVYnusiiCj5PJVV9M.jpg 05
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oNtn9AAxFoZFHqPpUGDa5P.jpg 06
+（多余文字）
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/3XGBCoZX6zEjz4Rh3KWLwF.jpg
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/rKN3fEtZW3dQtsizarp3s8.jpg
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/RmQVLkrxgm7JB9aKZ45jgd.jpg
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/zJAHHoEvLQtRTUSDDEeMfT.jpg
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oDdjU9CMguTmXZke5KzHz8.jpg
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/7bHcD5STZLNF5jbrna2KCE.jpg
+......
