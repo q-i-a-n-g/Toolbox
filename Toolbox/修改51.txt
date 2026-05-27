@@ -1,7 +1,9 @@
 
 1.Toolbox/修改50.txt 的这些没完成，继续修改：
       - 第1条的“1）把提示对齐”
-
+      - apple芯片版-AI&答题卡-检查-报错：错误：自动下载失败：'PlaywrightContextManager' object has no attribute '_playwright'
+      - apple芯片版-每日分配-校准名单错误，如图：Toolbox/apple-名单.png
+            - 每日分配-报错：E002：自动下载过程异常 ('PlaywrightContextManager' object has no attribute '_playwright')
 2. 每日分配
       - 调整OCR识别结果面板的展示顺序，与报名截图中的顺序保持一致，终端的分配结果展示也用这个顺序
       - 打开“配置”，所见如图 Toolbox/每日分配-增加名单的空间.png，可以把红框的位置利用上，展示更多的名单
