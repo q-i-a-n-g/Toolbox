@@ -96,6 +96,12 @@ final class RootViewModel: ObservableObject {
     private let textStorageKeyPrefix = "Toolbox.savedInput."
     private let hiddenToolIDsKey = "Toolbox.sidebar.hiddenToolIDs"
     private let sidebarOrderKey = "Toolbox.sidebar.order"
+    private let canonicalDailyAssignNames = [
+        "李橙橙", "符于娜", "刘雨菲", "阎思宇", "王哲",
+        "崔雅琪", "李旻羲", "汪哲锐", "李梦洁", "来晨",
+        "王国通", "马壮", "郭小雨", "李梦园", "段凯莉",
+        "韩正", "郝佳益", "李迪", "蹇文慧", "王子怡"
+    ]
     private let fileStore = ToolFileStore()
     private var inputDraftByTool: [String: String] = [:]
     private var dailyAssignPreviewRowsBackup: [DailyAssignSignupRow] = []
@@ -356,7 +362,6 @@ final class RootViewModel: ObservableObject {
                     terminalText += "[识别] 请先完成上方报名结果确认\n"
                     return
                 }
-                sortDailyAssignRowsByNameList()
                 dailyAssignStage = .readyToRun
             } else {
                 startDailyAssignPreview()
@@ -583,14 +588,7 @@ final class RootViewModel: ObservableObject {
         let raw = fileStore.loadConfigText(for: selectedTool)
         let lines = raw.components(separatedBy: .newlines)
         
-        let defaultNames = [
-            "李橙橙", "符于娜", "刘雨菲", "阎思宇", "王哲",
-            "崔雅琪", "李旻羲", "汪哲锐", "李梦洁", "来晨",
-            "王国通", "马壮", "郭小雨", "李梦园", "段凯莉",
-            "韩正", "郝佳益", "李迪", "蹇文慧", "王子怡"
-        ]
-
-        var namesToUse = defaultNames
+        var namesToUse = canonicalDailyAssignNames
         if let namesLine = lines.first(where: { $0.hasPrefix("NAMES=") }) {
             let savedNames = namesLine.replacingOccurrences(of: "NAMES=", with: "")
                 .components(separatedBy: ",")
@@ -646,7 +644,7 @@ final class RootViewModel: ObservableObject {
         let batch = max(1, min(openLinksConfig.batchSize, 200))
         let dedupe = openLinksConfig.dedupeLinks ? "1" : "0"
         let text = """
-        # 每批打开多少个链接
+        # 每次打开几个链接
         BATCH_SIZE=\(batch)
 
         # 打开前先去重：1 = 去重，0 = 不去重
@@ -977,15 +975,29 @@ final class RootViewModel: ObservableObject {
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
                 if !names.isEmpty {
+                    if containsCorruptDailyAssignNames(names) {
+                        repairDailyAssignNamesConfig(tool: tool)
+                        return canonicalDailyAssignNames
+                    }
                     return names
                 }
             }
         }
-        return [
-            "李橙橙", "符于娜", "刘雨菲", "阎思宇", "王哲",
-            "崔雅琪", "李旻羲", "汪哲锐", "李梦洁", "来晨",
-            "王国通", "马壮", "郭小雨", "李梦园", "段凯莉",
-            "韩正", "郝佳益", "李迪", "蹇文慧", "王子怡"
-        ]
+        repairDailyAssignNamesConfig(tool: tool)
+        return canonicalDailyAssignNames
+    }
+
+    private func containsCorruptDailyAssignNames(_ names: [String]) -> Bool {
+        let knownBadFragments = ["校准名单", "可编辑", "英文逗号", "名单中没", "不会分配", "新增姓名", "分隔"]
+        return names.contains { name in
+            knownBadFragments.contains { name.contains($0) }
+        }
+    }
+
+    private func repairDailyAssignNamesConfig(tool: ScriptTool) {
+        let current = fileStore.loadConfigText(for: tool)
+        let kept = current.components(separatedBy: .newlines).filter { !$0.hasPrefix("NAMES=") }
+        let merged = (["NAMES=" + canonicalDailyAssignNames.joined(separator: ",")] + kept).joined(separator: "\n")
+        try? fileStore.saveConfigText(merged, for: tool)
     }
 }

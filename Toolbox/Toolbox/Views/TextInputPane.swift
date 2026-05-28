@@ -104,10 +104,10 @@ struct OpenLinksConfigPane: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("批量打开链接")
+                Text("每次打开几个链接")
                     .font(.system(size: 13, weight: .semibold))
 
-                Text("设置每批打开的链接数量，以及是否先过滤重复链接。")
+                Text("到达这个数量后暂停，按回车继续下一批。")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
 
@@ -148,7 +148,7 @@ struct DailyAssignConfigPane: View {
                 Text("校准名单")
                     .font(.system(size: 13, weight: .semibold))
 
-                Text("名单中没有的人不会分配任务。可删除、编辑或新增姓名。")
+                Text("注意：名单中没有的，不会给他分配任务。共 \(names.count) 人。")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
 
@@ -178,7 +178,7 @@ struct DailyAssignConfigPane: View {
                         }
                     }
                 }
-                .frame(minHeight: 110, maxHeight: 170)
+                .frame(minHeight: 220, maxHeight: .infinity)
                 .background(Color.black.opacity(0.14))
                 .overlay(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -198,7 +198,7 @@ struct DailyAssignConfigPane: View {
                     .buttonStyle(.borderedProminent)
                 }
             }
-            .configBlock()
+            .configBlock(fillVerticalSpace: true)
 
             Spacer()
         }
@@ -209,10 +209,10 @@ struct DailyAssignConfigPane: View {
 }
 
 private extension View {
-    func configBlock() -> some View {
+    func configBlock(fillVerticalSpace: Bool = false) -> some View {
         self
             .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: fillVerticalSpace ? .infinity : nil, alignment: .leading)
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.35))
             .overlay(
                 RoundedRectangle(cornerRadius: 4, style: .continuous)

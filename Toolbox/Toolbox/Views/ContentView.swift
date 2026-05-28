@@ -132,7 +132,9 @@ struct ContentView: View {
                     } else {
                         VSplitView {
                             textPane
+                                .frame(minHeight: 110, idealHeight: 170)
                             terminalPane(showEditorControls: false)
+                                .frame(minHeight: 170, idealHeight: 330)
                         }
                     }
                 }

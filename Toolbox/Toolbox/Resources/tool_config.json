@@ -5,7 +5,7 @@
     "scriptRelativePath": "打开链接.command",
     "usesTextInput": true,
     "defaultText": "",
-    "helpText": "1. 复制多行链接 到 当前文本框，链接的格式参考下方“支持的格式”\n2. 点击“开始”按钮\n3. 回车 继续打开下一批\n\n自动查找有效链接，过滤无关字符，支持的格式：\n\nhttps://example.com/a\n\n12abcd   https://example.com/b\nhttps://example.com/c   note456 \n...... ",
+    "helpText": "1. 把链接放到文本框中。\n2. 点击“开始”按钮\n3. 回车 继续打开下一批\n\n自动查找有效链接，过滤无关字符，支持的格式：\n\nhttps://example.com/a\n\n12abcd   https://example.com/b\nhttps://example.com/c   note456 \n...... ",
     "helpFileName": "open-links-help.txt",
     "configFileName": "open-links.env"
   },
@@ -15,7 +15,7 @@
     "scriptRelativePath": "图片批量下载.command",
     "usesTextInput": true,
     "defaultText": "",
-    "helpText": "1. 复制多行链接 到 当前文本框，链接的格式参考下方“支持的格式”\n2. 点击“开始”按钮\n\n支持的格式：\nhttps://example.com/a.png\n\n123      https://example.com/b.png  （下载图片并重命名为 3.png）\n\nhttps://example.com/c.png   custom-name  （下载图片并重命名为 custom-name.png）\n...... ",
+    "helpText": "1. 把链接放到文本框中。\n2. 点击“开始”按钮\n\n支持的格式：\nhttps://example.com/a.png\n\n11 https://example.com/b.png (图片重命名为 11.png)\n\nhttps://example.com/c.png custom-name (图片重命名为 custom-name.png)\n...... ",
     "helpFileName": "download-images-help.txt",
     "configFileName": "download-images.env"
   },

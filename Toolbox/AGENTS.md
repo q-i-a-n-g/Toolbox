@@ -76,6 +76,7 @@ lipo -extract arm64 ffmpeg -output ffmpeg_thin
 
 - **架构分发**: 以后**不再使用**单一的 Universal 包，必须分别打包 `Apple 芯片版` 和 `Intel 芯片版`。
 - **二进制瘦身**: 打包前必须使用 `lipo` 对内置的二进制文件（如 `ffmpeg`）进行提纯（Thinning），仅保留当前安装包所需的单一架构，以减小体积。
+- **PyInstaller 包瘦身边界**: `check_main_pkg` 内的 PyInstaller 启动器（`check_main_bin`、`daily_assign_main_bin`）不能在打包后再 `lipo -thin`，因为 PyInstaller 归档附在 Mach-O 后面，瘦身会破坏归档偏移。只允许瘦身 Playwright 自带的 `check_main_pkg/_internal/playwright/driver/node`。Xcode 解包脚本必须按目标架构校验已解开的 `check_main_pkg`，避免把上一次构建残留的 Intel/Apple 单架构文件复制进另一版安装包。
 - **零依赖**: 所有的外部工具必须包含在资源包内。
 - **签名**: 即使是 Ad-hoc 签名 (`-`) 也必须存在。若打包过程中删除 App Bundle 内的 zip 或其他资源以瘦身，必须在删除后重新执行 `codesign --force --deep --sign - --timestamp=none Toolbox.app`，否则资源封印会引用已删除文件，`codesign --verify --deep --strict` 会失败。
 

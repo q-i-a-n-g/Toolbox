@@ -332,10 +332,12 @@ struct StitchImagesPane: View {
             StitchFolderDropZone(folderURL: state.folderURL, onDrop: onFolderDrop)
                 .frame(height: 105)
 
+            Spacer(minLength: 0)
+
             HStack(spacing: 16) {
-                stitchModeButton(title: "上下\n两两拼接", icon: "rectangle.split.2x1", mode: "1")
-                stitchModeButton(title: "上下\n三三拼接", icon: "rectangle.split.3x1", mode: "2")
-                stitchModeButton(title: "左右\n两两拼接", icon: "rectangle.split.1x2", mode: "3")
+                stitchModeButton(title: "上下\n两两拼接", mode: "1", layout: .vertical(count: 2))
+                stitchModeButton(title: "上下\n三三拼接", mode: "2", layout: .vertical(count: 3))
+                stitchModeButton(title: "左右\n两两拼接", mode: "3", layout: .horizontal(count: 2))
             }
             .frame(maxWidth: .infinity)
 
@@ -346,14 +348,14 @@ struct StitchImagesPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func stitchModeButton(title: String, icon: String, mode: String) -> some View {
+    private func stitchModeButton(title: String, mode: String, layout: StitchModeIcon.Layout) -> some View {
         let selected = state.mode == mode
         return Button {
             state.mode = mode
         } label: {
             VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 28, weight: .regular))
+                StitchModeIcon(layout: layout)
+                    .frame(width: 36, height: 30)
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
                     .multilineTextAlignment(.center)
@@ -372,6 +374,37 @@ struct StitchImagesPane: View {
         }
         .buttonStyle(.plain)
         .help(title.replacingOccurrences(of: "\n", with: ""))
+    }
+}
+
+private struct StitchModeIcon: View {
+    enum Layout {
+        case vertical(count: Int)
+        case horizontal(count: Int)
+    }
+
+    let layout: Layout
+
+    var body: some View {
+        switch layout {
+        case .vertical(let count):
+            VStack(spacing: 3) {
+                ForEach(0..<count, id: \.self) { _ in
+                    segment
+                }
+            }
+        case .horizontal(let count):
+            HStack(spacing: 3) {
+                ForEach(0..<count, id: \.self) { _ in
+                    segment
+                }
+            }
+        }
+    }
+
+    private var segment: some View {
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .stroke(lineWidth: 1.5)
     }
 }
 

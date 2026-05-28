@@ -835,6 +835,7 @@ def main() -> int:
 
     confirmed_signup = parse_confirmed_signup(os.environ.get("DAILY_ASSIGN_CONFIRMED_SIGNUP", ""), names)
     signup = confirmed_signup if confirmed_signup else signup_ocr
+    signup_order = list(confirmed_signup.keys()) if confirmed_signup else list(ocr_order)
     if sum(signup.values()) <= 0:
         print("E004：OCR识别 - 无有效报名数量"); return 1
     print(f"[确认] 报名结果已确认：{len(signup)} 人")
@@ -888,7 +889,7 @@ def main() -> int:
         w = t.pages if method == "page" else t.tags
         assigned_w[owner] = assigned_w.get(owner, 0) + w
     total_weight_all = sum(assigned_w.values())
-    display_order = list(ocr_order) if ocr_order else []
+    display_order = list(signup_order) if signup_order else []
     for n in signup:
         if n not in display_order:
             display_order.append(n)

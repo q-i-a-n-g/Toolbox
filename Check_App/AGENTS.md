@@ -1,7 +1,7 @@
 # Check_App (check.app) - Agent Documentation
 
 ## Project Overview
-`check.app` is a MacOS desktop application built with Python. Its primary purpose is to automate the downloading and processing of evaluation task data (Excel files) for weekly quality checks. It generates a comprehensive `result.xlsx` report highlighting various errors, bad cases, and statistics for different task types.
+`check.app` is a MacOS desktop application built with Python. Its primary purpose is to automate the downloading and processing of evaluation task data (Excel files) for weekly quality checks. It generates a comprehensive `AI_check.xlsx` report highlighting various errors, bad cases, and statistics for different task types.
 
 ## Tech Stack
 - **Core Logic**: Python (`check_main.py`)
@@ -22,7 +22,7 @@ The application operates in a multi-stage workflow:
    - Navigates to the constructed links on `mapi.yuanfudao.com`.
    - Simulates clicks to download detailed evaluation data files (`AI.xlsx`, `分数.xlsx`, `答题卡-AI.xlsx`, `答题卡-分数.xlsx`) into the `data/` folder.
 
-3. **Data Transformation & Reporting (`result.xlsx`)**:
+3. **Data Transformation & Reporting (`AI_check.xlsx`)**:
    - Matches the downloaded data with base assignment data to assign owners ("负责人").
    - Filters, deduplicates, and formats data into specific sheets based on precise business rules:
      - **Sheet 1**: 拼链接
@@ -46,7 +46,7 @@ The application operates in a multi-stage workflow:
 - `check_main.py`: The entry point and main logic file. Contains all scanning, Playwright automation, and Excel generation code.
 - `check.app/`: The final MacOS application bundle. The executable logic resides at `check.app/Contents/Resources/check_main`.
 - `data/`: The working directory for input and intermediate Excel files.
-- `result.xlsx`: The final generated output report.
+- `AI_check.xlsx`: The final generated output report.
 - `需求文档.txt`, `修改*.txt`, `新界面*.txt`: Product Requirements Documents (PRD) and modification history dictating the business logic for each sheet.
 
 ## Guidelines for AI Agents
@@ -61,7 +61,8 @@ The application operates in a multi-stage workflow:
    - Playwright uses a local Chrome context to preserve login cookies. Avoid headless operations if they break the auth state.
 
 3. **Packaging Updates**:
-   - If you make changes to `check_main.py` or `check_headers_final.py`, the changes will not be reflected in `check.app` until it is repackaged using PyInstaller.
+   - If you make changes to `check_main.py` or `daily_assign_main.py`, rebuild the shared onedir package with PyInstaller and refresh `Toolbox/Resources/Binaries/check_main_pkg.zip`.
+   - Do not run `lipo -thin` on PyInstaller executables after build. PyInstaller appends its archive to the Mach-O file, and post-build thinning breaks that archive. Only Playwright's embedded `driver/node` may be thinned inside the final Toolbox app bundle.
 
 4. **Formatting Constraints**:
    - Ensure the terminal output strictly aligns with the PRD (using `pad_display` for precise UI alignment).

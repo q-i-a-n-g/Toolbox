@@ -14,6 +14,7 @@ import argparse
 import unicodedata
 import time
 from collections import defaultdict
+from pathlib import Path
 
 # 延迟导入重量级库
 import openpyxl
@@ -317,7 +318,7 @@ def main():
         print("错误：未找到有效的基础任务文件")
         return
 
-    LABEL_WIDTH = 54
+    LABEL_WIDTH = 42
 
     wb = openpyxl.Workbook(); wb.remove(wb.active)
     url1, url2 = build_link_sheet(wb, base_info)
@@ -485,6 +486,8 @@ def main():
 
     wb.save(out_path)
 
-    print("=" * 51 + f"\n👉 已生成：Desktop/AI_check.xlsx ✅\n")
+    output = Path(out_path)
+    folder_name = output.parent.name or "."
+    print("=" * 51 + f"\n👉 已生成：{folder_name}/{output.name} ✅\n")
 
 if __name__ == "__main__": main()
