@@ -9,7 +9,15 @@
       - 自动下载AI失败时，取消3次重试，提示“今天没有AI 或 下载失败”；且跳过AI的分配，直接分配 答题卡任务
 
 3. 图片批量下载
+      - 该功能改名为“批量下载”，查找哪些地方需要相应地更改，给改了
       - 默认 文本框、终端所占比例=AI&答题卡-检查 的拖拽区、终端的比例
+      - 打开帮助，在末尾添加：
+            “#下载pdf文件，并重命名
+            51 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/0b19b8060af5afdbf4b17f98e5f20cd8.pdf
+            56 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/5facc7f76b709431ed4b08ae1d7dff7c.pdf
+            66 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/7ffce2c35024a9f8480ba6cf769ad850.pdf
+            ......
+            ”
 
 4. “帮助页”、“配置页”占满右侧
       - 点开所有的“帮助”、“配置”，看到的都是一整页，占满右侧，不再出现终端。点“关闭”、“保存”后恢复原样。
