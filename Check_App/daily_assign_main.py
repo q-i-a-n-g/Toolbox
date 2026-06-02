@@ -92,17 +92,22 @@ def classify(files: list[Path]):
     return shots, ai, card
 
 
-def mock_download(ai_target: Path, card_target: Path) -> bool:
+def mock_download(ai_target: Path, card_target: Path) -> tuple[bool, bool]:
     ai_src = os.environ.get("DAILY_ASSIGN_MOCK_AI_SOURCE", "").strip()
     card_src = os.environ.get("DAILY_ASSIGN_MOCK_CARD_SOURCE", "").strip()
-    if not ai_src or not card_src:
-        return False
-    ai_s, card_s = Path(ai_src), Path(card_src)
-    if not ai_s.exists() or not card_s.exists():
-        return False
-    shutil.copy2(ai_s, ai_target)
-    shutil.copy2(card_s, card_target)
-    return True
+    ok_ai = False
+    ok_card = False
+    if ai_src:
+        ai_s = Path(ai_src)
+        if ai_s.exists():
+            shutil.copy2(ai_s, ai_target)
+            ok_ai = True
+    if card_src:
+        card_s = Path(card_src)
+        if card_s.exists():
+            shutil.copy2(card_s, card_target)
+            ok_card = True
+    return ok_ai, ok_card
 
 
 def normalize_task_text(text: str) -> str:
@@ -254,10 +259,7 @@ def _download_one_table(page, url: str, task_name: str, target: Path, label: str
     
     ok_filter, sample = _wait_search_match(page, task_name, timeout_ms=12000)
     if not ok_filter:
-        if label == "答题卡":
-            print("今天没有答题卡")
-        else:
-            print(f"E002：{label} 搜索结果匹配失败（期望：{task_name}）")
+        print(f"E002：{label} 搜索结果匹配失败（期望：{task_name}）")
         _take_screenshot(page, f"{label}_search_fail")
         return False
     
@@ -305,15 +307,15 @@ def _download_one_table(page, url: str, task_name: str, target: Path, label: str
         return False
 
 
-def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: str) -> bool:
+def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: str) -> tuple[bool, bool]:
     user_data_dir = os.path.expanduser("~/.gemini/NewApp_chrome_profile")
     chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     if sync_playwright is None:
         print("E002：Playwright 未安装。")
-        return False
+        return False, False
     if not os.path.exists(chrome_path):
         print(f"E002：找不到 Chrome 路径: {chrome_path}")
-        return False
+        return False, False
     if not os.path.exists(user_data_dir): os.makedirs(user_data_dir, exist_ok=True)
 
     try:
@@ -325,22 +327,13 @@ def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: s
             )
             page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
 
-            def download_with_retry(url: str, task: str, target: Path, label: str) -> bool:
-                for attempt in range(1, 4):
-                    ok = _download_one_table(page, url, task, target, label)
-                    if ok:
-                        return True
-                    print(f"[下载] {label} 第{attempt}次失败，准备重试...")
-                    page.wait_for_timeout(2000)
-                return False
-
-            ok1 = download_with_retry("https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage", ai_task, ai_target, "AI")
-            ok2 = download_with_retry("https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card", card_task, card_target, "答题卡")
+            ok1 = _download_one_table(page, "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage", ai_task, ai_target, "AI")
+            ok2 = _download_one_table(page, "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card", card_task, card_target, "答题卡")
             browser_context.close()
-            return ok1 and ok2
+            return ok1, ok2
     except Exception as e:
         print(f"E002：自动下载过程异常 ({e})")
-        return False
+        return False, False
 
 
 def to_num(v) -> float:
@@ -593,8 +586,22 @@ def parse_confirmed_signup(raw: str, names: List[str]) -> Dict[str, int]:
     return out
 
 
-def assign(tasks: List[TaskRow], signup: Dict[str, int], weight_key: str, carry: Dict[str, float] | None = None):
-    names = sorted(signup.keys())
+def ordered_signup_names(signup: Dict[str, int], name_order: List[str] | None = None) -> List[str]:
+    names: List[str] = []
+    seen = set()
+    for name in name_order or []:
+        if name in signup and name not in seen:
+            names.append(name)
+            seen.add(name)
+    for name in signup:
+        if name not in seen:
+            names.append(name)
+            seen.add(name)
+    return names
+
+
+def assign(tasks: List[TaskRow], signup: Dict[str, int], weight_key: str, carry: Dict[str, float] | None = None, name_order: List[str] | None = None):
+    names = ordered_signup_names(signup, name_order)
     total_signup = sum(signup.values())
     target_ratio = {n: signup[n] / total_signup for n in names}
     assigned_weight = {n: 0.0 for n in names}
@@ -729,8 +736,8 @@ def task_weight_sum(tasks: List[TaskRow], weight_key: str) -> float:
     return total
 
 
-def split_signup_for_linked_mode(ai_tasks: List[TaskRow], card_tasks: List[TaskRow], signup: Dict[str, int], weight_key: str) -> tuple[Dict[str, int], Dict[str, int]]:
-    names = sorted(signup.keys())
+def split_signup_for_linked_mode(ai_tasks: List[TaskRow], card_tasks: List[TaskRow], signup: Dict[str, int], weight_key: str, name_order: List[str] | None = None) -> tuple[Dict[str, int], Dict[str, int]]:
+    names = ordered_signup_names(signup, name_order)
     if len(names) <= 1 or not ai_tasks or not card_tasks:
         return signup, signup
 
@@ -848,12 +855,17 @@ def main() -> int:
         print(f"[下载] 答题卡任务名: {card_task_name(date.today())}")
         ai_path, card_path = dl_dir / "AI_待分配.xlsx", dl_dir / "答题卡_待分配.xlsx"
         mode = os.environ.get("DAILY_ASSIGN_DOWNLOAD_MODE", "disabled").strip().lower()
-        ok = False
-        if mode == "mock": ok = mock_download(ai_path, card_path)
-        elif mode == "real": ok = real_download(ai_path, card_path, ai_task_name(date.today()), card_task_name(date.today()))
-        if not ok:
-            print("E002：自动下载失败，请重试（或 手动下载 今天的任务表格）"); return 1
-        ai, card = ai_path, card_path
+        ok_ai, ok_card = False, False
+        if mode == "mock":
+            ok_ai, ok_card = mock_download(ai_path, card_path)
+        elif mode == "real":
+            ok_ai, ok_card = real_download(ai_path, card_path, ai_task_name(date.today()), card_task_name(date.today()))
+        if not ok_ai:
+            print("今天没有AI 或 下载失败")
+        if not ok_card:
+            print("今天没有答题卡 或 下载失败")
+        ai = ai_path if ok_ai else None
+        card = card_path if ok_card else None
     
     print("\n[分配] 开始分配...")
     print("------------------------------")
@@ -866,13 +878,16 @@ def main() -> int:
     ai_tasks, card_tasks = [], []
     if ai: ai_headers, ai_tasks = read_tasks(ai, ai_cap)
     if card: card_headers, card_tasks = read_tasks(card, card_cap)
+    if not ai_tasks and not card_tasks:
+        print("E002：没有可分配的 AI 或 答题卡任务表")
+        return 1
     if mode == "linked":
-        ai_signup, card_signup = split_signup_for_linked_mode(ai_tasks, card_tasks, signup, method)
-        if ai_tasks: ai_rows, _ = assign(ai_tasks, ai_signup, method)
-        if card_tasks: card_rows, _ = assign(card_tasks, card_signup, method)
+        ai_signup, card_signup = split_signup_for_linked_mode(ai_tasks, card_tasks, signup, method, signup_order)
+        if ai_tasks: ai_rows, _ = assign(ai_tasks, ai_signup, method, name_order=signup_order)
+        if card_tasks: card_rows, _ = assign(card_tasks, card_signup, method, name_order=signup_order)
     else:
-        if ai_tasks: ai_rows, _ = assign(ai_tasks, signup, method)
-        if card_tasks: card_rows, _ = assign(card_tasks, signup, method)
+        if ai_tasks: ai_rows, _ = assign(ai_tasks, signup, method, name_order=signup_order)
+        if card_tasks: card_rows, _ = assign(card_tasks, signup, method, name_order=signup_order)
     output_dir = Path(os.environ.get("OUTPUT_DIR", str(Path.cwd())))
     output, tmp = output_dir / "分配表.xlsx", (output_dir / "分配表.xlsx").with_suffix(".tmp.xlsx")
     try:

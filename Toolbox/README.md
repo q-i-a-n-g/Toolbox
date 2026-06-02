@@ -3,7 +3,7 @@
 macOS local toolbox skeleton for:
 
 - 打开链接
-- 图片批量下载
+- 批量下载
 - 图片指定重命名
 - 图片拼接
 

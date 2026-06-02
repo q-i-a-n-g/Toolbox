@@ -328,11 +328,9 @@ struct StitchImagesPane: View {
     let onFolderDrop: (URL) -> Void
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 12) {
             StitchFolderDropZone(folderURL: state.folderURL, onDrop: onFolderDrop)
-                .frame(height: 105)
-
-            Spacer(minLength: 0)
+                .frame(height: 128)
 
             HStack(spacing: 16) {
                 stitchModeButton(title: "上下\n两两拼接", mode: "1", layout: .vertical(count: 2))
@@ -340,6 +338,7 @@ struct StitchImagesPane: View {
                 stitchModeButton(title: "左右\n两两拼接", mode: "3", layout: .horizontal(count: 2))
             }
             .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
 
             Spacer(minLength: 0)
         }
@@ -361,7 +360,7 @@ struct StitchImagesPane: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
-            .frame(width: 118, height: 88)
+            .frame(width: 112, height: 76)
             .foregroundColor(selected ? .accentColor : .primary)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)

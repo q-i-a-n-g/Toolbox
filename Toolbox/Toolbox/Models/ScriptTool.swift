@@ -25,11 +25,11 @@ struct ScriptTool: Identifiable, Hashable, Codable {
         ),
         ScriptTool(
             id: "download-images",
-            title: "图片批量下载",
+            title: "批量下载",
             scriptRelativePath: "图片批量下载.command",
             usesTextInput: true,
             defaultText: "12 https://example.com/a.png\nhttps://example.com/b.png custom-name",
-            helpText: "图片批量下载\n\n用法：\n1. 在上方输入原来 links.txt 的内容。\n2. 点击“开始”。\n3. 下载日志会在下方终端实时显示。\n",
+            helpText: "批量下载\n\n用法：\n1. 在上方输入原来 links.txt 的内容。\n2. 点击“开始”。\n3. 下载日志会在下方终端实时显示。\n",
             helpFileName: "download-images-help.txt",
             configFileName: "download-images.env"
         ),

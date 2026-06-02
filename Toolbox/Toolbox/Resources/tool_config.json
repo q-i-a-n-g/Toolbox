@@ -11,7 +11,7 @@
   },
   {
     "id": "download-images",
-    "title": "图片批量下载",
+    "title": "批量下载",
     "scriptRelativePath": "图片批量下载.command",
     "usesTextInput": true,
     "defaultText": "",

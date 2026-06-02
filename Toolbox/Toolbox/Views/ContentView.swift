@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     @ObservedObject var viewModel: RootViewModel
@@ -46,7 +47,9 @@ struct ContentView: View {
                 }
 
                 Group {
-                    if viewModel.selectedTool.id == "file-renamer" {
+                    if viewModel.editorMode == .help || viewModel.editorMode == .config {
+                        textPane
+                    } else if viewModel.selectedTool.id == "file-renamer" {
                         FileRenamerPane(
                             state: $viewModel.renamerState,
                             isFocused: $viewModel.isRenamerFocused,
@@ -121,7 +124,7 @@ struct ContentView: View {
                                 state: $viewModel.stitchImagesState,
                                 onFolderDrop: viewModel.updateStitchImagesFolder
                             )
-                            .frame(minHeight: 230, idealHeight: 280)
+                            .frame(minHeight: 220, idealHeight: 250)
                             terminalPane(showEditorControls: false)
                                 .frame(minHeight: 160, idealHeight: 260)
                         }
@@ -132,9 +135,9 @@ struct ContentView: View {
                     } else {
                         VSplitView {
                             textPane
-                                .frame(minHeight: 110, idealHeight: 170)
+                                .frame(minHeight: 120, idealHeight: 170)
                             terminalPane(showEditorControls: false)
-                                .frame(minHeight: 170, idealHeight: 330)
+                                .frame(minHeight: 220, idealHeight: 340)
                         }
                     }
                 }
@@ -155,6 +158,12 @@ struct ContentView: View {
         }
         .padding(14)
         .background(Color(red: 0.118, green: 0.118, blue: 0.118))
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            viewModel.refocusTerminalAfterActivationIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            viewModel.refocusTerminalAfterActivationIfNeeded()
+        }
     }
 
     private var textPane: some View {

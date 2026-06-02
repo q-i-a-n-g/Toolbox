@@ -254,6 +254,11 @@ final class RootViewModel: ObservableObject {
         zoomTarget = zoomTarget == target ? .none : target
     }
 
+    func refocusTerminalAfterActivationIfNeeded() {
+        guard isRunning, selectedTool.id == "open-links" else { return }
+        isTerminalFocused = true
+    }
+
     func updateEditorText(_ newValue: String) {
         editorText = newValue
 
