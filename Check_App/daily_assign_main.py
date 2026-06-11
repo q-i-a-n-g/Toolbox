@@ -506,17 +506,21 @@ def run_vision_ocr(image_path: Path) -> str:
 
 
 def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[str, int], List[str], List[str]]:
-    out, unmatched, order = {}, [], []
+    out: Dict[str, int] = {}
+    first_pos: Dict[str, int] = {}
+    unmatched: List[str] = []
+    unmatched_pos: Dict[str, int] = {}
     noise = {"所有人", "完成", "周五", "周一", "周二", "周三", "周四", "周六", "周日", "评测", "比例", "请大家", "今天", "任务", "表格", "下载", "报名", "自动", "👉", "人数", "约有", "需在", "评测组"}
 
-    def remember(name: str, count: int):
+    def remember(name: str, count: int, pos: int):
         if count not in (2, 3, 5):
             return
-        if name not in out:
-            order.append(name)
+        if name not in first_pos or pos < first_pos[name]:
+            first_pos[name] = pos
         out[name] = count
         if name in unmatched:
             unmatched.remove(name)
+            unmatched_pos.pop(name, None)
 
     def parse_count_near(text: str, start: int, end: int) -> int | None:
         left = max(0, start - 8)
@@ -527,10 +531,11 @@ def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[s
             return nums[0]
         return None
 
-    for shot in shots:
+    for shot_index, shot in enumerate(shots):
         text_file = shot.with_suffix(".txt")
         text = text_file.read_text(encoding="utf-8", errors="ignore") if text_file.exists() else run_vision_ocr(shot)
         compact = re.sub(r"\s+", "", text)
+        shot_offset = shot_index * 1_000_000
 
         for name in names:
             visible_name = name.replace("@“”", "")
@@ -545,22 +550,28 @@ def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[s
                 for m in re.finditer(re.escape(pattern), compact):
                     cnt = parse_count_near(compact, m.start(), m.end())
                     if cnt:
-                        remember(name, cnt)
+                        remember(name, cnt, shot_offset + m.start())
                         break
                 if name in out:
                     break
 
-        for raw_name, cnt_s in re.findall(r"([\u4e00-\u9fa5@\u201c\u201d\u2018\u2019\u0022\u0027\s]{2,12})[^\d\u4e00-\u9fa5]{0,10}(\d+)", text):
+        for match in re.finditer(r"([\u4e00-\u9fa5@\u201c\u201d\u2018\u2019\u0022\u0027\s]{2,12})[^\d\u4e00-\u9fa5]{0,10}(\d+)", text):
+            raw_name, cnt_s = match.group(1), match.group(2)
             norm = normalize_name(raw_name, names)
             if not norm:
                 pure = "".join(re.findall(r"[\u4e00-\u9fa5]", raw_name))
                 if len(pure) < 2 or len(pure) > 4 or any(n in pure for n in noise): continue
                 if not any(lev(pure, n.replace("@“”", "")) <= 1 for n in names): continue
-                if pure not in unmatched and pure not in out: unmatched.append(pure)
+                if pure not in unmatched and pure not in out:
+                    unmatched.append(pure)
+                    unmatched_pos[pure] = shot_offset + match.start()
                 continue
             cnt = int(cnt_s)
             if cnt > 0:
-                remember(norm, cnt)
+                remember(norm, cnt, shot_offset + match.start())
+
+    order = sorted(out.keys(), key=lambda name: (first_pos.get(name, 10**12), name))
+    unmatched.sort(key=lambda name: (unmatched_pos.get(name, 10**12), name))
     return out, unmatched, order
 
 
