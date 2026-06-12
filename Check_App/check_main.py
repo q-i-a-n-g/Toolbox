@@ -45,6 +45,9 @@ def pad_display(s, width):
     curr_w = display_width(s)
     return s + " " * max(0, width - curr_w)
 
+def log_status(label, status, width=42):
+    print(f"{pad_display(label, width)}{status}")
+
 # ── 工具函数 ─────────────────────────────────────────────────────────────
 def read_sheet(ws):
     it = ws.iter_rows(values_only=True)
@@ -245,9 +248,9 @@ def auto_download_files(url1, url2, download_dir, label_width):
                     btn.wait_for(state="visible", timeout=10000)
                     with page.expect_download(timeout=90000) as d: btn.click(force=True)
                     ok = save_download(d.value, os.path.join(download_dir, ai_file))
-                    print(f"{pad_display(ai_file.replace('-', '_'), label_width)}{'✅' if ok else '❌'}")
+                    log_status(ai_file.replace('-', '_'), "✅" if ok else "❌", label_width)
                 except:
-                    print(f"{pad_display(ai_file.replace('-', '_'), label_width)}❌")
+                    log_status(ai_file.replace('-', '_'), "❌", label_width)
                 sys.stdout.flush()
 
                 # Score.xlsx
@@ -266,11 +269,11 @@ def auto_download_files(url1, url2, download_dir, label_width):
                     if btns.count() >= 2:
                         with page.expect_download(timeout=90000) as d2: btns.last.click(force=True)
                         ok = save_download(d2.value, os.path.join(download_dir, score_file))
-                        print(f"{pad_display(score_file.replace('-', '_'), label_width)}{'✅' if ok else '❌'}")
+                        log_status(score_file.replace('-', '_'), "✅" if ok else "❌", label_width)
                     else:
-                        print(f"{pad_display(score_file.replace('-', '_'), label_width)}❌")
+                        log_status(score_file.replace('-', '_'), "❌", label_width)
                 except:
-                    print(f"{pad_display(('答题卡-分数.xlsx' if is_card else '分数.xlsx').replace('-', '_'), label_width)}❌")
+                    log_status(('答题卡-分数.xlsx' if is_card else '分数.xlsx').replace('-', '_'), "❌", label_width)
                 sys.stdout.flush()
 
             if url1: process_link(url1, is_card=False)
@@ -322,7 +325,7 @@ def main():
 
     wb = openpyxl.Workbook(); wb.remove(wb.active)
     url1, url2 = build_link_sheet(wb, base_info)
-    print(f"{pad_display('拼链接 ...', LABEL_WIDTH)}已生成 ✅")
+    log_status("拼链接 ...", "已生成 ✅", LABEL_WIDTH)
     sys.stdout.flush()
 
     # 自动下载
@@ -339,11 +342,11 @@ def main():
 
     # 1. 分数识别
     c = generic_build(wb, named, "分数识别错误或忽略", "分数.xlsx", f_score, owner_map, yellow_cols=["是否有分数框", "分数识别情况"])
-    print(f"{pad_display('分数识别错误或忽略 ...', LABEL_WIDTH)}已生成 ✅ ({c}行)")
+    log_status("分数识别错误或忽略 ...", f"已生成 ✅ ({c}行)", LABEL_WIDTH)
     
     # 2. 固定批改
     c = generic_build(wb, named, "固定批改错误或忽略", "AI.xlsx", f_fixed, owner_map, yellow_cols=["固定批改识别结果"])
-    print(f"{pad_display('固定批改错误或忽略 ...', LABEL_WIDTH)}已生成 ✅ ({c}行)")
+    log_status("固定批改错误或忽略 ...", f"已生成 ✅ ({c}行)", LABEL_WIDTH)
     
     # 3. 题目框
     if "AI.xlsx" in named:
@@ -359,8 +362,8 @@ def main():
         ws.append(h + ["负责人", "兼职用的链接"])
         for r in final: ws.append(r + [lookup_owner(r, h, owner_map), convert_link(r[lk_idx])])
         apply_format(ws, yellow_cols=["题目框识别情况"])
-        print(f"{pad_display('题目框错误+忽略超过3个 ...', LABEL_WIDTH)}已生成 ✅ ({len(final)}行)")
-    else: print(f"{pad_display('题目框错误+忽略超过3个 ...', LABEL_WIDTH)}等待补充 ⏳")
+        log_status("题目框错误+忽略超过3个 ...", f"已生成 ✅ ({len(final)}行)", LABEL_WIDTH)
+    else: log_status("题目框错误+忽略超过3个 ...", "等待补充 ⏳", LABEL_WIDTH)
 
     # 4. BadCase
     if "AI.xlsx" in named:
@@ -372,13 +375,13 @@ def main():
         for r in flt: ws.append(list(r) + [lookup_owner(r, h, owner_map), "", ""])
         apply_format(ws, yellow_cols=["批改情况", "是否AI可批", "作答结果-算法可解评测结果"])
         if len(flt) >= 2: ws.cell(row=int(round(len(flt)/2.0))+1, column=len(h)+3).fill = GREEN_FILL
-        print(f"{pad_display('BadCase ...', LABEL_WIDTH)}已生成 ✅ ({len(flt)}行)")
-    else: print(f"{pad_display('BadCase ...', LABEL_WIDTH)}等待补充 ⏳")
+        log_status("BadCase ...", f"已生成 ✅ ({len(flt)}行)", LABEL_WIDTH)
+    else: log_status("BadCase ...", "等待补充 ⏳", LABEL_WIDTH)
 
     # 5. 答题卡_分数
     f_c_score = lambda r, h: col(h, "是否有分数框")>=0 and col(h, "分数识别情况")>=0 and col(h, "分数-算法可解评测结果")>=0 and r[col(h, "是否有分数框")]=="有分数框" and r[col(h, "分数识别情况")] in ("忽略", "错误") and r[col(h, "分数-算法可解评测结果")]=="是"
     c = generic_build(wb, named, "答题卡_分数识别错误或忽略", "答题卡-分数.xlsx", f_c_score, owner_map, "cardPage", ["是否有分数框", "分数识别情况", "分数-算法可解评测结果"])
-    print(f"{pad_display('答题卡_分数识别错误或忽略 ...', LABEL_WIDTH)}已生成 ✅ ({c}行)")
+    log_status("答题卡_分数识别错误或忽略 ...", f"已生成 ✅ ({c}行)", LABEL_WIDTH)
 
     # 6. 答题卡_AI_BadCase
     if "答题卡-AI.xlsx" in named:
@@ -389,8 +392,8 @@ def main():
         ws.append(h + ["负责人", "兼职用的链接"])
         for r in flt: ws.append(r + [lookup_owner(r, h, owner_map), convert_link(r[lk], "cardPage")])
         apply_format(ws, yellow_cols=["批改情况", "作答结果-算法可解评测结果"])
-        print(f"{pad_display('答题卡_AI_BadCase ...', LABEL_WIDTH)}已生成 ✅ ({len(flt)}行)")
-    else: print(f"{pad_display('答题卡_AI_BadCase ...', LABEL_WIDTH)}等待补充 ⏳")
+        log_status("答题卡_AI_BadCase ...", f"已生成 ✅ ({len(flt)}行)", LABEL_WIDTH)
+    else: log_status("答题卡_AI_BadCase ...", "等待补充 ⏳", LABEL_WIDTH)
 
     # 7. 答题卡_AI
     if "答题卡-AI.xlsx" in named:
@@ -420,8 +423,8 @@ def main():
                 ws.cell(row=ri, column=bid+1).fill = GRAY_FILL_S7
 
         apply_format(ws, yellow_cols=["批改情况", "作答结果-算法可解评测结果"])
-        print(f"{pad_display('答题卡_AI_错误次数≥3（星标参考） ...', LABEL_WIDTH)}已生成 ✅ ({len(fnl)}行)")
-    else: print(f"{pad_display('答题卡_AI_错误次数≥3（星标参考） ...', LABEL_WIDTH)}等待补充 ⏳")
+        log_status("答题卡_AI_错误次数≥3（星标参考） ...", f"已生成 ✅ ({len(fnl)}行)", LABEL_WIDTH)
+    else: log_status("答题卡_AI_错误次数≥3（星标参考） ...", "等待补充 ⏳", LABEL_WIDTH)
 
     # 8. AI_错误次数≥3（星标参考）
     if "AI.xlsx" in named:
@@ -481,13 +484,13 @@ def main():
             ws.column_dimensions[get_column_letter(ci)].hidden = True
             
         apply_format(ws, yellow_cols=["批改情况", "是否AI可批", "作答结果-算法可解评测结果"])
-        print(f"{pad_display('AI_错误次数≥3（星标参考） ...', LABEL_WIDTH)}已生成 ✅ ({len(final)}行)")
-    else: print(f"{pad_display('AI_错误次数≥3（星标参考） ...', LABEL_WIDTH)}等待补充 ⏳")
+        log_status("AI_错误次数≥3（星标参考） ...", f"已生成 ✅ ({len(final)}行)", LABEL_WIDTH)
+    else: log_status("AI_错误次数≥3（星标参考） ...", "等待补充 ⏳", LABEL_WIDTH)
 
     wb.save(out_path)
 
     output = Path(out_path)
     folder_name = output.parent.name or "."
-    print("=" * 51 + f"\n👉 已生成：{folder_name}/{output.name} ✅\n")
+    print("=" * 51 + f"\n👉 已生成：{folder_name}/{output.name}\n")
 
 if __name__ == "__main__": main()

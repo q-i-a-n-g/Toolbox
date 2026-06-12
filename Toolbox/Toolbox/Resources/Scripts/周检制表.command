@@ -24,4 +24,4 @@ fi
 exec "$CHECK_BIN" \
     --base-files "${FILES[@]}" \
     --download-dir "$DOWNLOAD_DIR" \
-    --output-file "$OUTPUT_DIR/AI_check.xlsx"
+    --output-file "$OUTPUT_DIR/AI&答题卡_check.xlsx"

@@ -5,32 +5,8 @@ struct ContentView: View {
     @ObservedObject var viewModel: RootViewModel
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack {
-                Button(action: { viewModel.toggleSidebarVisibility() }) {
-                    Image(systemName: viewModel.isSidebarVisible ? "sidebar.left" : "sidebar.right")
-                        .foregroundStyle(Color.white.opacity(0.9))
-                }
-                .buttonStyle(.plain)
-                Spacer()
-
-                if viewModel.selectedTool.id == "daily-assign" || viewModel.selectedTool.id == "weekly-check" {
-                    Button(action: viewModel.toggleHelp) {
-                        Text(viewModel.helpButtonTitle)
-                            .foregroundColor(viewModel.helpButtonTitle == "关闭" ? .accentColor : .white.opacity(0.9))
-                    }
-                    .buttonStyle(.borderless)
-                }
-                if viewModel.selectedTool.id == "daily-assign" {
-                    Button(action: viewModel.handleConfigButton) {
-                        Text(viewModel.configButtonTitle)
-                            .foregroundColor(viewModel.configButtonTitle == "保存" ? .accentColor : .white.opacity(0.9))
-                    }
-                    .buttonStyle(.borderless)
-                }
-            }
-
-            HSplitView {
+        ZStack(alignment: .topLeading) {
+            HStack(spacing: 0) {
                 if viewModel.isSidebarVisible {
                     SidebarView(
                         tools: viewModel.visibleTools,
@@ -41,9 +17,10 @@ struct ContentView: View {
                         isToolHidden: { viewModel.isToolHidden($0) },
                         onToggleToolVisibility: { viewModel.toggleToolVisibility($0) }
                     )
-                    .frame(minWidth: 96, idealWidth: 132, maxWidth: 168)
+                    .frame(width: 148)
                     .background(Color(red: 0.145, green: 0.149, blue: 0.153))
                     .overlay(Rectangle().fill(Color.white.opacity(0.2)).frame(width: 1), alignment: .trailing)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
                 }
 
                 Group {
@@ -53,7 +30,7 @@ struct ContentView: View {
                         FileRenamerPane(
                             state: $viewModel.renamerState,
                             isFocused: $viewModel.isRenamerFocused,
-                            onFolderDrop: { viewModel.updateRenamerFolder($0) },
+                            onTargetDrop: { viewModel.updateRenamerTargets($0) },
                             onStart: { viewModel.executeRename() },
                             onUndo: { viewModel.undoRename() },
                             onParamChange: { viewModel.refreshRenamerPreview() }
@@ -119,14 +96,14 @@ struct ContentView: View {
                             }
                         }
                     } else if viewModel.selectedTool.id == "stitch-images" {
-                        VSplitView {
+                        VStack(spacing: 10) {
                             StitchImagesPane(
                                 state: $viewModel.stitchImagesState,
                                 onFolderDrop: viewModel.updateStitchImagesFolder
                             )
-                            .frame(minHeight: 220, idealHeight: 250)
+                            .frame(height: 270)
                             terminalPane(showEditorControls: false)
-                                .frame(minHeight: 160, idealHeight: 260)
+                                .frame(maxHeight: .infinity)
                         }
                     } else if viewModel.zoomTarget == .text && viewModel.shouldShowTextPane {
                         textPane
@@ -142,6 +119,7 @@ struct ContentView: View {
                     }
                 }
                 .frame(minWidth: 360)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(red: 0.118, green: 0.118, blue: 0.118))
                 .overlay(alignment: .bottomTrailing) {
                     Button(action: { viewModel.clearAllToolInputs() }) {
@@ -155,6 +133,11 @@ struct ContentView: View {
                     .padding(.bottom, 138)
                 }
             }
+
+            topToolButtons
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.trailing, 10)
+                .padding(.top, 0)
         }
         .padding(14)
         .background(Color(red: 0.118, green: 0.118, blue: 0.118))
@@ -163,6 +146,27 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             viewModel.refocusTerminalAfterActivationIfNeeded()
+        }
+    }
+
+    @ViewBuilder
+    private var topToolButtons: some View {
+        if viewModel.selectedTool.id == "daily-assign" || viewModel.selectedTool.id == "weekly-check" {
+            HStack(spacing: 8) {
+                Button(action: viewModel.toggleHelp) {
+                    Text(viewModel.helpButtonTitle)
+                        .foregroundColor(viewModel.helpButtonTitle == "关闭" ? .accentColor : .white.opacity(0.9))
+                }
+                .buttonStyle(.borderless)
+
+                if viewModel.selectedTool.id == "daily-assign" {
+                    Button(action: viewModel.handleConfigButton) {
+                        Text(viewModel.configButtonTitle)
+                            .foregroundColor(viewModel.configButtonTitle == "保存" ? .accentColor : .white.opacity(0.9))
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
         }
     }
 
@@ -179,6 +183,15 @@ struct ContentView: View {
                 )
             } else if viewModel.editorMode == .config && viewModel.selectedTool.id == "daily-assign" {
                 DailyAssignConfigPane(names: $viewModel.dailyAssignConfigNames)
+            } else if viewModel.editorMode == .help && (viewModel.selectedTool.id == "open-links" || viewModel.selectedTool.id == "download-images") {
+                CopyableHelpPane(
+                    title: viewModel.editorTitle,
+                    text: viewModel.editorText,
+                    helpButtonTitle: viewModel.helpButtonTitle,
+                    isZoomed: viewModel.zoomTarget == .text,
+                    onHelp: viewModel.toggleHelp,
+                    onToggleZoom: { viewModel.toggleZoom(for: .text) }
+                )
             } else {
                 TextInputPane(
                     title: viewModel.editorTitle,

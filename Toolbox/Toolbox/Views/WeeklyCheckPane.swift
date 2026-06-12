@@ -18,6 +18,7 @@ struct WeeklyCheckPane: View {
 struct WeeklyCheckDropZoneView: View {
     @Binding var files: [URL]
     @State private var isHovering = false
+    @State private var hasPasteableFiles = false
 
     var body: some View {
         ZStack {
@@ -29,7 +30,6 @@ struct WeeklyCheckDropZoneView: View {
                 Image(systemName: "tray.and.arrow.down")
                     .font(.system(size: 32, weight: .regular))
                     .foregroundColor(isHovering ? .accentColor : .secondary)
-                    .onTapGesture { appendFromPasteboard() }
 
                 if !files.isEmpty {
                     VStack(spacing: 4) {
@@ -47,19 +47,25 @@ struct WeeklyCheckDropZoneView: View {
                         }
                     }
                 } else {
-                    Text("已分配的线上任务表，复制一份，拖到这里...")
+                    Text(hasPasteableFiles ? "点这里，可粘贴..." : "线上每日任务表，复制一份，拖到这里...")
                         .font(.headline)
                         .foregroundColor(.secondary)
                 }
             }
             .padding()
         }
+        .contentShape(Rectangle())
+        .onTapGesture { appendFromPasteboard() }
         .onDrop(of: [.fileURL], isTargeted: $isHovering) { providers in
             appendFromProviders(providers)
             return true
         }
         .onPasteCommand(of: [UTType.fileURL]) { providers in
             appendFromProviders(providers)
+        }
+        .onAppear(perform: refreshPasteAvailability)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshPasteAvailability()
         }
     }
 
@@ -68,6 +74,7 @@ struct WeeklyCheckDropZoneView: View {
         if let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL] {
             appendFiles(urls)
         }
+        refreshPasteAvailability()
     }
 
     private func appendFromProviders(_ providers: [NSItemProvider]) {
@@ -103,5 +110,16 @@ struct WeeklyCheckDropZoneView: View {
             merged.append(url)
         }
         files = merged
+    }
+
+    private func refreshPasteAvailability() {
+        let classes: [AnyClass] = [NSURL.self]
+        let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL] ?? []
+        hasPasteableFiles = urls.contains { url in
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else { return false }
+            let ext = url.pathExtension.lowercased()
+            return ext == "xlsx" || ext == "xls"
+        }
     }
 }

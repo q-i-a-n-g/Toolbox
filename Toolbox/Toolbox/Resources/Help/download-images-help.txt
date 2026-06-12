@@ -1,34 +1,29 @@
-用法：
+## 用法：
 1. 把链接放到文本框中。
 2. 点击“开始”。
-3. 下载日志会在下方终端实时显示。
+3. 终端实时显示下载日志。
 
-支持格式：
-https://example.com/a.png
-11 https://example.com/b.png (图片重命名为 11.png)
-https://example.com/c.png custom-name (图片重命名为 custom-name.png)
-
+## 可直接复制到 文本框 测试：
 -----------------------------------------------
-真实链接，可测试：
-
-01 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/p7fxZVJ64NDRDWzZKjrqXC.jpg
-02 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oordGuRfowGGQ4xY7VnjyB.jpg
-03 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/yK8qXhdThfuLRB9B5NxMyS.jpg
-
-https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/HVDEqXc3mKV84iiYp4uwfD.jpg 04
-https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/9fUvGnVYnusiiCj5PJVV9M.jpg 05
-https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oNtn9AAxFoZFHqPpUGDa5P.jpg 06
-（多余文字）
+# 直接下载
 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/3XGBCoZX6zEjz4Rh3KWLwF.jpg
 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/rKN3fEtZW3dQtsizarp3s8.jpg
 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/RmQVLkrxgm7JB9aKZ45jgd.jpg
-https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/zJAHHoEvLQtRTUSDDEeMfT.jpg
-https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oDdjU9CMguTmXZke5KzHz8.jpg
-https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/7bHcD5STZLNF5jbrna2KCE.jpg
+
+# 下载并重命名 (001.jpg, 002.jpg, 003.jpg)
+001 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/p7fxZVJ64NDRDWzZKjrqXC.jpg
+002 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oordGuRfowGGQ4xY7VnjyB.jpg
+003 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/yK8qXhdThfuLRB9B5NxMyS.jpg
+
+# 下载并重命名 (004.jpg, 005.jpg, 006.jpg)
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/HVDEqXc3mKV84iiYp4uwfD.jpg 004
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/9fUvGnVYnusiiCj5PJVV9M.jpg 005
+https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oNtn9AAxFoZFHqPpUGDa5P.jpg 006
+（多余文字，自动过滤）
 ......
 
-#下载pdf文件，并重命名
-51 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/0b19b8060af5afdbf4b17f98e5f20cd8.pdf
-56 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/5facc7f76b709431ed4b08ae1d7dff7c.pdf
-66 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/7ffce2c35024a9f8480ba6cf769ad850.pdf
+# 下载pdf文件，并重命名
+77 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/0b19b8060af5afdbf4b17f98e5f20cd8.pdf
+88 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/5facc7f76b709431ed4b08ae1d7dff7c.pdf
+99 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/7ffce2c35024a9f8480ba6cf769ad850.pdf
 ......

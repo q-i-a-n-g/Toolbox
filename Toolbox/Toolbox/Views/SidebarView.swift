@@ -16,7 +16,7 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("工具箱")
                 .font(.title3.bold())
-                .padding(.leading, 6)
+                .padding(.leading, 10)
                 .foregroundColor(Color.white.opacity(0.92))
 
             ScrollView {
@@ -36,6 +36,7 @@ struct SidebarView: View {
                             ))
                     }
                 }
+                .animation(.easeInOut(duration: 0.16), value: selectedID)
             }
             .contextMenu {
                 ForEach(allTools) { tool in
@@ -60,6 +61,7 @@ struct SidebarView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 8)
+        .frame(width: 132, alignment: .leading)
         .contentShape(Rectangle())
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)

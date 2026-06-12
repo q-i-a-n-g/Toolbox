@@ -9,7 +9,7 @@ struct ToolboxApp: App {
         WindowGroup {
             ContentView(viewModel: viewModel)
                 .preferredColorScheme(.dark)
-                .background(WindowConfigurator())
+                .background(WindowConfigurator(viewModel: viewModel))
                 .frame(minWidth: 420, minHeight: 280)
         }
     }
@@ -17,6 +17,7 @@ struct ToolboxApp: App {
 
 private struct WindowConfigurator: NSViewRepresentable {
     private static let defaultSize = NSSize(width: 1152, height: 768)
+    @ObservedObject var viewModel: RootViewModel
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
@@ -30,19 +31,30 @@ private struct WindowConfigurator: NSViewRepresentable {
             window.setFrame(frame, display: true)
             window.center()
             context.coordinator.installDoubleClickZoomHandler(for: window)
+            context.coordinator.installSidebarButton(for: window)
         }
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.updateSidebarButton()
     }
 
-    final class Coordinator {
+    func makeCoordinator() -> Coordinator {
+        Coordinator(viewModel: viewModel)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        private weak var viewModel: RootViewModel?
         private var didInstall = false
         private var monitor: Any?
+        private weak var window: NSWindow?
+        private weak var sidebarButton: NSButton?
+
+        init(viewModel: RootViewModel) {
+            self.viewModel = viewModel
+        }
 
         deinit {
             if let monitor {
@@ -61,6 +73,46 @@ private struct WindowConfigurator: NSViewRepresentable {
                 }
                 return event
             }
+        }
+
+        func installSidebarButton(for window: NSWindow) {
+            self.window = window
+            guard sidebarButton == nil,
+                  let titlebarView = window.standardWindowButton(.closeButton)?.superview else { return }
+
+            let button = NSButton()
+            button.isBordered = false
+            button.bezelStyle = .regularSquare
+            button.target = self
+            button.action = #selector(toggleSidebar)
+            button.toolTip = "显示/隐藏侧边栏"
+            button.imagePosition = .imageOnly
+            button.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+            titlebarView.addSubview(button)
+            sidebarButton = button
+            updateSidebarButton()
+        }
+
+        func updateSidebarButton() {
+            guard let button = sidebarButton,
+                  let window,
+                  let titlebarView = window.standardWindowButton(.closeButton)?.superview else { return }
+
+            let imageName = viewModel?.isSidebarVisible == true ? "sidebar.left" : "sidebar.right"
+            button.image = NSImage(systemSymbolName: imageName, accessibilityDescription: nil)
+
+            let y: CGFloat
+            if let zoomButton = window.standardWindowButton(.zoomButton) {
+                y = zoomButton.frame.midY - 8
+            } else {
+                y = max(4, (titlebarView.bounds.height - 16) / 2)
+            }
+            button.frame = NSRect(x: 142, y: y, width: 18, height: 18)
+        }
+
+        @objc private func toggleSidebar() {
+            viewModel?.toggleSidebarVisibility()
+            updateSidebarButton()
         }
     }
 }

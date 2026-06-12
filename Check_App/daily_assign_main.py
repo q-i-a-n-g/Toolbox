@@ -8,6 +8,7 @@ import json
 import subprocess
 import warnings
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -157,10 +158,11 @@ def _query_visible_task_names(page) -> List[str]:
 
 def _take_screenshot(page, name: str):
     try:
-        path = Path("screenShot") / f"{name}_{int(time.time())}.png"
+        download_dir = Path(os.environ.get("DOWNLOAD_DIR", str(Path.home() / "Downloads")))
+        path = download_dir / f"{name}_{int(time.time())}.png"
         path.parent.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(path))
-        print(f"[截图] 已保存: {path.name}")
+        print(f"[截图] 已保存: {path}")
     except Exception as e:
         print(f"[截图] 失败: {e}")
 
@@ -505,6 +507,43 @@ def run_vision_ocr(image_path: Path) -> str:
     except: return ""
 
 
+def load_signup_texts(shots: List[Path]) -> List[str]:
+    texts: List[str] = [""] * len(shots)
+    missing: List[tuple[int, Path]] = []
+    for idx, shot in enumerate(shots):
+        text_file = shot.with_suffix(".txt")
+        if text_file.exists():
+            texts[idx] = text_file.read_text(encoding="utf-8", errors="ignore")
+        else:
+            missing.append((idx, shot))
+
+    if not missing:
+        return texts
+
+    worker_env = os.environ.get("OCR_WORKERS", "").strip()
+    try:
+        worker_count = int(worker_env) if worker_env else min(3, len(missing))
+    except Exception:
+        worker_count = min(3, len(missing))
+    worker_count = max(1, min(worker_count, len(missing), 6))
+
+    done = 0
+    if len(missing) > 1:
+        print(f"[识别] 共 {len(missing)} 张截图需要OCR，并行处理 {worker_count} 张...", flush=True)
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = {executor.submit(run_vision_ocr, shot): (idx, shot) for idx, shot in missing}
+        for future in as_completed(futures):
+            idx, _ = futures[future]
+            try:
+                texts[idx] = future.result()
+            except Exception:
+                texts[idx] = ""
+            done += 1
+            if len(missing) > 1:
+                print(f"[识别] OCR进度 {done}/{len(missing)}", flush=True)
+    return texts
+
+
 def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[str, int], List[str], List[str]]:
     out: Dict[str, int] = {}
     first_pos: Dict[str, int] = {}
@@ -531,9 +570,8 @@ def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[s
             return nums[0]
         return None
 
-    for shot_index, shot in enumerate(shots):
-        text_file = shot.with_suffix(".txt")
-        text = text_file.read_text(encoding="utf-8", errors="ignore") if text_file.exists() else run_vision_ocr(shot)
+    shot_texts = load_signup_texts(shots)
+    for shot_index, text in enumerate(shot_texts):
         compact = re.sub(r"\s+", "", text)
         shot_offset = shot_index * 1_000_000
 
@@ -872,9 +910,9 @@ def main() -> int:
         elif mode == "real":
             ok_ai, ok_card = real_download(ai_path, card_path, ai_task_name(date.today()), card_task_name(date.today()))
         if not ok_ai:
-            print("今天没有AI 或 下载失败")
+            print("\n👉 今天没有AI or 下载失败")
         if not ok_card:
-            print("今天没有答题卡 或 下载失败")
+            print("\n👉 今天没有答题卡 or 下载失败")
         ai = ai_path if ok_ai else None
         card = card_path if ok_card else None
     

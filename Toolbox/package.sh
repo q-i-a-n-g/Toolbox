@@ -5,9 +5,22 @@ echo "Starting build process for Toolbox..."
 
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 SCHEME="${TOOLBOX_SCHEME:-ScriptToolbox}"
+HOST_ARCH="$(uname -m)"
+
+if [ "$HOST_ARCH" = "arm64" ]; then
+    BUILD_ARCH="arm64"
+    BUILD_DIR="build/arm64"
+    BUILD_LABEL="Apple Silicon"
+else
+    BUILD_ARCH="x86_64"
+    BUILD_DIR="build/x86_64"
+    BUILD_LABEL="Intel"
+fi
 
 mkdir -p build
-rm -rf build/arm64 build/x86_64
+rm -rf build/arm64 build/x86_64 build/Debug build/Release
+rm -f build/Toolbox_AppleSilicon.zip build/Toolbox_Intel.zip
+rm -f Toolbox_AppleSilicon.zip Toolbox_Intel.zip
 
 thin_binary_if_possible() {
     local arch="$1"
@@ -29,57 +42,25 @@ thin_check_pkg() {
     thin_binary_if_possible "$arch" "$pkg/_internal/playwright/driver/node"
 }
 
-echo "Building for Apple Silicon (arm64)..."
+echo "Building for $BUILD_LABEL ($BUILD_ARCH)..."
 xcodebuild -project Toolbox.xcodeproj -scheme "$SCHEME" -configuration Release \
-    ARCHS="arm64" ONLY_ACTIVE_ARCH=NO \
-    CONFIGURATION_BUILD_DIR="$(pwd)/build/arm64" \
+    ARCHS="$BUILD_ARCH" ONLY_ACTIVE_ARCH=NO \
+    CONFIGURATION_BUILD_DIR="$(pwd)/$BUILD_DIR" \
     CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=YES > /dev/null
 
-# Clean up zips inside the arm64 app bundle
-rm -f build/arm64/Toolbox.app/Contents/Resources/Binaries/ffmpeg_arm.zip
-rm -f build/arm64/Toolbox.app/Contents/Resources/Binaries/ffmpeg_intel.zip
-rm -f build/arm64/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip
+# Clean up zips inside the app bundle
+rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg_arm.zip"
+rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg_intel.zip"
+rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip"
 # Strip symbols
-strip -x build/arm64/Toolbox.app/Contents/Resources/Binaries/ffmpeg 2>/dev/null || true
-thin_check_pkg arm64 build/arm64/Toolbox.app
+strip -x "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg" 2>/dev/null || true
+thin_check_pkg "$BUILD_ARCH" "$BUILD_DIR/Toolbox.app"
 # Re-sign after resource slimming; removing sealed resources invalidates the Xcode signature.
-codesign --force --deep --sign - --timestamp=none build/arm64/Toolbox.app
-
-echo "Zipping arm64 app..."
-pushd build/arm64 > /dev/null
-zip -q9ry Toolbox_AppleSilicon.zip Toolbox.app
-popd > /dev/null
-
-echo "Building for Intel (x86_64)..."
-xcodebuild -project Toolbox.xcodeproj -scheme "$SCHEME" -configuration Release \
-    ARCHS="x86_64" ONLY_ACTIVE_ARCH=NO \
-    CONFIGURATION_BUILD_DIR="$(pwd)/build/x86_64" \
-    CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=YES > /dev/null
-
-# Clean up zips inside the x86_64 app bundle
-rm -f build/x86_64/Toolbox.app/Contents/Resources/Binaries/ffmpeg_arm.zip
-rm -f build/x86_64/Toolbox.app/Contents/Resources/Binaries/ffmpeg_intel.zip
-rm -f build/x86_64/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip
-# Strip symbols
-strip -x build/x86_64/Toolbox.app/Contents/Resources/Binaries/ffmpeg 2>/dev/null || true
-thin_check_pkg x86_64 build/x86_64/Toolbox.app
-# Re-sign after resource slimming; removing sealed resources invalidates the Xcode signature.
-codesign --force --deep --sign - --timestamp=none build/x86_64/Toolbox.app
-
-echo "Zipping x86_64 app..."
-pushd build/x86_64 > /dev/null
-zip -q9ry Toolbox_Intel.zip Toolbox.app
-popd > /dev/null
-
-cp build/arm64/Toolbox_AppleSilicon.zip .
-cp build/x86_64/Toolbox_Intel.zip .
-if [ -n "$TOOLBOX_PACKAGE_OUTPUT_DIR" ] && [ -d "$TOOLBOX_PACKAGE_OUTPUT_DIR" ]; then
-  cp build/arm64/Toolbox_AppleSilicon.zip "$TOOLBOX_PACKAGE_OUTPUT_DIR/"
-  cp build/x86_64/Toolbox_Intel.zip "$TOOLBOX_PACKAGE_OUTPUT_DIR/"
-fi
+codesign --force --deep --sign - --timestamp=none "$BUILD_DIR/Toolbox.app"
 
 # Cleanup the unpacked source binary and architecture log to keep workspace pristine
 rm -f Toolbox/Resources/Binaries/ffmpeg
 rm -f Toolbox/Resources/Binaries/.last_ffmpeg_arch
 
-echo "Packaging complete!"
+echo "Packaging complete! App is available at:"
+echo "  $BUILD_DIR/Toolbox.app"

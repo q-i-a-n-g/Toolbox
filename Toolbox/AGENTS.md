@@ -6,7 +6,7 @@
 Toolbox 是一个原生的 macOS 应用程序，旨在为常用的 Bash 脚本提供一个图形化（GUI）外壳。它集成了终端输出视图、文本输入框以及脚本管理逻辑。
 
 - **目标系统**: macOS 12.3 及以上版本。
-- **架构支持**: Universal Binary (Intel + Apple Silicon)。
+- **架构支持**: 按当前打包机器生成单架构版本（Intel 或 Apple Silicon）。
 - **核心逻辑**: 通过 PTY (Pseudo-terminal) 环境执行本地脚本，并将输出实时重定向到 SwiftUI 视图。
 
 ## 2. 技术栈 (Tech Stack)
@@ -58,13 +58,13 @@ zip -rq check_main_pkg.zip check_main_pkg -x "*.DS_Store"
 ### 5.2 构建指令
 使用 Xcode 命令行（需先 `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`，若默认指向 CommandLineTools 会找不到 `xcodebuild`）。工程内 **Scheme 名为 `ScriptToolbox`**（Target 仍为 `Toolbox`）。
 
-分别生成针对 Apple 芯片和 Intel 芯片的精简包，可直接运行仓库内脚本：
+按当前机器芯片生成对应架构的精简包，可直接运行仓库内脚本：
 ```bash
 cd Toolbox   # 即包含 Toolbox.xcodeproj 的目录
 ./package.sh
 ```
-在打包时，Xcode 运行脚本会分别自动将对应的架构版本 `ffmpeg_arm.zip` 或 `ffmpeg_intel.zip` 解压为 `Binaries/ffmpeg`。这避免了使用庞大的 Universal 合并架构，并可直接在不同架构的 Mac 上一键打包，同时大幅缩小安装包的体积。
-可选环境变量：`TOOLBOX_SCHEME`（默认 `ScriptToolbox`）、`TOOLBOX_PACKAGE_OUTPUT_DIR`（若设置且为已存在目录，则额外复制 zip 到该路径）。
+在打包时，Xcode 运行脚本会根据当前机器芯片自动将对应的架构版本 `ffmpeg_arm.zip` 或 `ffmpeg_intel.zip` 解压为 `Binaries/ffmpeg`。这避免了使用庞大的 Universal 合并架构，同时大幅缩小安装包的体积。
+打包产物只保留当前架构的 `.app`，不再生成压缩后的 `.zip` 文件：Apple 芯片机器产物为 `Toolbox/build/arm64/Toolbox.app`，Intel 机器产物为 `Toolbox/build/x86_64/Toolbox.app`。可选环境变量：`TOOLBOX_SCHEME`（默认 `ScriptToolbox`）。
 
 手动示例：
 ```bash
@@ -74,7 +74,7 @@ xcodebuild -project Toolbox.xcodeproj -scheme ScriptToolbox -configuration Relea
 lipo -extract arm64 ffmpeg -output ffmpeg_thin
 ```
 
-- **架构分发**: 以后**不再使用**单一的 Universal 包，必须分别打包 `Apple 芯片版` 和 `Intel 芯片版`。
+- **架构分发**: 以后**不再使用**单一的 Universal 包，也不在同一台机器上同时输出两套架构；电脑是什么芯片，就只打对应架构的一个 `.app`。需要另一架构时，在对应芯片的 Mac 上运行 `./package.sh`。
 - **二进制瘦身**: 打包前必须使用 `lipo` 对内置的二进制文件（如 `ffmpeg`）进行提纯（Thinning），仅保留当前安装包所需的单一架构，以减小体积。
 - **PyInstaller 包瘦身边界**: `check_main_pkg` 内的 PyInstaller 启动器（`check_main_bin`、`daily_assign_main_bin`）不能在打包后再 `lipo -thin`，因为 PyInstaller 归档附在 Mach-O 后面，瘦身会破坏归档偏移。只允许瘦身 Playwright 自带的 `check_main_pkg/_internal/playwright/driver/node`。Xcode 解包脚本必须按目标架构校验已解开的 `check_main_pkg`，避免把上一次构建残留的 Intel/Apple 单架构文件复制进另一版安装包。
 - **零依赖**: 所有的外部工具必须包含在资源包内。

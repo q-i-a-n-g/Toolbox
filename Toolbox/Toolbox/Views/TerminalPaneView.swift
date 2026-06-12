@@ -85,15 +85,6 @@ struct TerminalPaneView: View {
                 }
             }
 
-            Circle()
-                .fill(isRunning ? Color.green : Color.secondary.opacity(0.4))
-                .frame(width: 10, height: 10)
-
-            Button(action: onToggleZoom) {
-                Image(systemName: isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-            }
-            .buttonStyle(.borderless)
-            .help(isZoomed ? "恢复分栏" : "放大到最大")
         }
         .padding(.bottom, 10)
     }

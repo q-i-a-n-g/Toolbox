@@ -228,6 +228,7 @@ struct DailyAssignPane: View {
 private struct DailyAssignDropZoneView: View {
     @Binding var files: [URL]
     @State private var isHovering = false
+    @State private var hasPasteableFiles = false
 
     var body: some View {
         ZStack {
@@ -239,10 +240,9 @@ private struct DailyAssignDropZoneView: View {
                 Image(systemName: "tray.and.arrow.down")
                     .font(.system(size: 32, weight: .regular))
                     .foregroundColor(isHovering ? .accentColor : .secondary)
-                    .onTapGesture { appendFromPasteboard() }
 
                 if files.isEmpty {
-                    Text("报名截图 拖到这里...")
+                    Text(hasPasteableFiles ? "点这里，可粘贴..." : "报名截图 拖到这里...")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 } else {
@@ -264,12 +264,18 @@ private struct DailyAssignDropZoneView: View {
             }
             .padding()
         }
+        .contentShape(Rectangle())
+        .onTapGesture { appendFromPasteboard() }
         .onDrop(of: [.fileURL], isTargeted: $isHovering) { providers in
             appendFromProviders(providers)
             return true
         }
         .onPasteCommand(of: [UTType.fileURL]) { providers in
             appendFromProviders(providers)
+        }
+        .onAppear(perform: refreshPasteAvailability)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshPasteAvailability()
         }
     }
 
@@ -278,6 +284,7 @@ private struct DailyAssignDropZoneView: View {
         if let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL] {
             appendFiles(urls)
         }
+        refreshPasteAvailability()
     }
 
     private func appendFromProviders(_ providers: [NSItemProvider]) {
@@ -321,6 +328,17 @@ private struct DailyAssignDropZoneView: View {
         }
         files = merged
     }
+
+    private func refreshPasteAvailability() {
+        let classes: [AnyClass] = [NSURL.self]
+        let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL] ?? []
+        hasPasteableFiles = urls.contains { url in
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else { return false }
+            let ext = url.pathExtension.lowercased()
+            return ["png", "jpg", "jpeg", "webp", "heic", "xlsx", "xls"].contains(ext)
+        }
+    }
 }
 
 struct StitchImagesPane: View {
@@ -328,9 +346,12 @@ struct StitchImagesPane: View {
     let onFolderDrop: (URL) -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             StitchFolderDropZone(folderURL: state.folderURL, onDrop: onFolderDrop)
-                .frame(height: 128)
+                .frame(height: 120)
+
+            Color.clear
+                .frame(height: 34)
 
             HStack(spacing: 16) {
                 stitchModeButton(title: "上下\n两两拼接", mode: "1", layout: .vertical(count: 2))
@@ -338,13 +359,13 @@ struct StitchImagesPane: View {
                 stitchModeButton(title: "左右\n两两拼接", mode: "3", layout: .horizontal(count: 2))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 20)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func stitchModeButton(title: String, mode: String, layout: StitchModeIcon.Layout) -> some View {
@@ -354,13 +375,13 @@ struct StitchImagesPane: View {
         } label: {
             VStack(spacing: 8) {
                 StitchModeIcon(layout: layout)
-                    .frame(width: 36, height: 30)
+                    .frame(width: 34, height: 28)
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
-            .frame(width: 112, height: 76)
+            .frame(width: 110, height: 70)
             .foregroundColor(selected ? .accentColor : .primary)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -411,6 +432,7 @@ private struct StitchFolderDropZone: View {
     let folderURL: URL?
     let onDrop: (URL) -> Void
     @State private var isHovering = false
+    @State private var hasPasteableFolder = false
 
     var body: some View {
         ZStack {
@@ -422,7 +444,6 @@ private struct StitchFolderDropZone: View {
                 Image(systemName: "folder.badge.plus")
                     .font(.system(size: 30, weight: .regular))
                     .foregroundColor(isHovering ? .accentColor : .secondary)
-                    .onTapGesture { appendFromPasteboard() }
 
                 if let url = folderURL {
                     Text(url.lastPathComponent)
@@ -434,13 +455,15 @@ private struct StitchFolderDropZone: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } else {
-                    Text("目标文件夹 拖到这里...")
+                    Text(hasPasteableFolder ? "点这里，可粘贴..." : "目标文件夹 拖到这里...")
                         .font(.headline)
                         .foregroundColor(.secondary)
                 }
             }
             .padding(.horizontal, 12)
         }
+        .contentShape(Rectangle())
+        .onTapGesture { appendFromPasteboard() }
         .onDrop(of: [.fileURL], isTargeted: $isHovering) { providers in
             appendFromProviders(providers)
             return true
@@ -448,12 +471,17 @@ private struct StitchFolderDropZone: View {
         .onPasteCommand(of: [UTType.fileURL]) { providers in
             appendFromProviders(providers)
         }
+        .onAppear(perform: refreshPasteAvailability)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshPasteAvailability()
+        }
     }
 
     private func appendFromPasteboard() {
         let classes: [AnyClass] = [NSURL.self]
         guard let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL] else { return }
         appendFirstFolder(urls)
+        refreshPasteAvailability()
     }
 
     private func appendFromProviders(_ providers: [NSItemProvider]) {
@@ -474,6 +502,15 @@ private struct StitchFolderDropZone: View {
                 onDrop(url)
                 return
             }
+        }
+    }
+
+    private func refreshPasteAvailability() {
+        let classes: [AnyClass] = [NSURL.self]
+        let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL] ?? []
+        hasPasteableFolder = urls.contains { url in
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
         }
     }
 }

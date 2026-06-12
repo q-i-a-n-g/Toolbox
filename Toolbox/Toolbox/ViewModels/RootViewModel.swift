@@ -29,6 +29,7 @@ struct RenameHistory {
 
 struct RenamerState {
     var folderURL: URL?
+    var selectedFileURLs: [URL] = []
     var prefix: String = ""
     var startNumber: Int = 1
     var step: Int = 1
@@ -295,11 +296,11 @@ final class RootViewModel: ObservableObject {
                 "",
                 "    - 自动打开统计详情页，下载 `AI、答题卡` 的统计详情表",
                 "",
-                "    - 自动处理下载的表格，生成 `AI_check.xlsx` 供检查。",
+                "    - 自动处理下载的表格，生成 `AI&答题卡_check.xlsx` 供检查。",
                 "",
                 "## 使用",
                 "",
-                "    - 把已分配的线上任务表(`AI`或`AI+答题卡`)，复制一份，拖到拖拽区，点 [开始] 按钮",
+                "    - 把线上每日任务表（ `AI` 或 `AI+答题卡` ）复制一份，拖到拖拽区，点 [开始] 按钮",
                 "",
                 "## Tips",
                 "",
@@ -357,7 +358,7 @@ final class RootViewModel: ObservableObject {
             return
         }
         if selectedTool.id == "weekly-check", weeklyCheckFiles.isEmpty {
-            terminalText += "[检查] 请先拖入已分配的线上任务表\n"
+            terminalText += "[检查] 请先拖入线上每日任务表\n"
             return
         }
 
@@ -467,7 +468,7 @@ final class RootViewModel: ObservableObject {
                         "Connection invalid"
                     ]
                     
-                    var filteredChunk = chunk
+                    let filteredChunk = chunk
                     for pattern in noisePatterns {
                         if filteredChunk.contains(pattern) {
                             return 
@@ -787,50 +788,82 @@ final class RootViewModel: ObservableObject {
 
     // MARK: - File Renamer Logic
 
-    func updateRenamerFolder(_ url: URL) {
-        renamerState.folderURL = url
+    func updateRenamerTargets(_ urls: [URL]) {
+        let fm = FileManager.default
+        var folders: [URL] = []
+        var files: [URL] = []
+
+        for url in urls {
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else { continue }
+            if isDir.boolValue {
+                folders.append(url)
+            } else {
+                files.append(url)
+            }
+        }
+
+        if folders.count == 1 && files.isEmpty {
+            renamerState.folderURL = folders[0]
+            renamerState.selectedFileURLs = []
+        } else if folders.isEmpty && !files.isEmpty {
+            renamerState.folderURL = nil
+            renamerState.selectedFileURLs = files
+        } else {
+            terminalText += "\n[重命名] 只能拖入单个文件夹，或拖入一个/多个文件；不能混合文件和文件夹，也不能拖入多个文件夹\n"
+            return
+        }
+
         refreshRenamerPreview()
         isRenamerFocused = true
     }
 
+    func updateRenamerFolder(_ url: URL) {
+        updateRenamerTargets([url])
+    }
+
     func refreshRenamerPreview() {
-        guard let folderURL = renamerState.folderURL else { return }
-        
         let fm = FileManager.default
-        do {
-            let urls = try fm.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: [.isRegularFileKey], options: .skipsHiddenFiles)
-            
-            // Filter: only regular files, no subdirs
-            let fileURLs = urls.filter { url in
-                var isReg: ObjCBool = false
-                return fm.fileExists(atPath: url.path, isDirectory: &isReg) && !isReg.boolValue
-            }.sorted { 
-                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        let sourceURLs: [URL]
+
+        if !renamerState.selectedFileURLs.isEmpty {
+            sourceURLs = renamerState.selectedFileURLs.filter { url in
+                var isDir: ObjCBool = false
+                return fm.fileExists(atPath: url.path, isDirectory: &isDir) && !isDir.boolValue
             }
-            
-            var items: [RenamerPreviewItem] = []
-            let paddingWidth = Int(renamerState.padding) ?? 0
-            
-            for (index, oldURL) in fileURLs.enumerated() {
-                let number = renamerState.startNumber + (index * renamerState.step)
-                let numberStr = paddingWidth > 0 ? String(format: "%0\(paddingWidth)d", number) : String(number)
-                
-                let ext = oldURL.pathExtension
-                let newName = renamerState.prefix + numberStr + (ext.isEmpty ? "" : "." + ext)
-                let newURL = folderURL.appendingPathComponent(newName)
-                
-                items.append(RenamerPreviewItem(oldName: oldURL.lastPathComponent, newName: newName, oldURL: oldURL, newURL: newURL))
+        } else if let folderURL = renamerState.folderURL {
+            do {
+                let urls = try fm.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: [.isRegularFileKey], options: .skipsHiddenFiles)
+                sourceURLs = urls.filter { url in
+                    var isDir: ObjCBool = false
+                    return fm.fileExists(atPath: url.path, isDirectory: &isDir) && !isDir.boolValue
+                }.sorted {
+                    $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+                }
+            } catch {
+                terminalText += "\n[重命名] 读取目录失败: \(error.localizedDescription)\n"
+                return
             }
-            
-            renamerState.previewItems = items
-        } catch {
-            terminalText += "\n[重命名] 读取目录失败: \(error.localizedDescription)\n"
+        } else {
+            renamerState.previewItems = []
+            return
+        }
+
+        let paddingWidth = Int(renamerState.padding) ?? 0
+        renamerState.previewItems = sourceURLs.enumerated().map { index, oldURL in
+            let number = renamerState.startNumber + (index * renamerState.step)
+            let numberStr = paddingWidth > 0 ? String(format: "%0\(paddingWidth)d", number) : String(number)
+            let ext = oldURL.pathExtension
+            let newName = renamerState.prefix + numberStr + (ext.isEmpty ? "" : "." + ext)
+            let newURL = oldURL.deletingLastPathComponent().appendingPathComponent(newName)
+
+            return RenamerPreviewItem(oldName: oldURL.lastPathComponent, newName: newName, oldURL: oldURL, newURL: newURL)
         }
     }
 
     func executeRename() {
         let items = renamerState.previewItems
-        guard !items.isEmpty, let folderURL = renamerState.folderURL else { return }
+        guard !items.isEmpty else { return }
         
         terminalText += "\n开始重命名 \(items.count) 个文件...\n"
         let fm = FileManager.default
@@ -846,7 +879,12 @@ final class RootViewModel: ObservableObject {
             }
         }
         
-        renamerState.history = RenameHistory(folderURL: folderURL, operations: completedOps)
+        if let historyFolder = renamerState.folderURL ?? completedOps.first?.old.deletingLastPathComponent() {
+            renamerState.history = RenameHistory(folderURL: historyFolder, operations: completedOps)
+        }
+        if !renamerState.selectedFileURLs.isEmpty {
+            renamerState.selectedFileURLs = completedOps.map(\.new)
+        }
         terminalText += "👉 任务已完成\n"
         
         // Refresh preview after operation (it will likely be empty or show new names if we re-read)
@@ -873,6 +911,9 @@ final class RootViewModel: ObservableObject {
         }
         
         renamerState.history = nil
+        if !renamerState.selectedFileURLs.isEmpty {
+            renamerState.selectedFileURLs = history.operations.map(\.old)
+        }
         terminalText += "👉 撤销完成\n"
         refreshRenamerPreview()
     }

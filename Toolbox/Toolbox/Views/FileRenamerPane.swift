@@ -1,10 +1,11 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct FileRenamerPane: View {
     @Binding var state: RenamerState
     @Binding var isFocused: Bool
-    let onFolderDrop: (URL) -> Void
+    let onTargetDrop: ([URL]) -> Void
     let onStart: () -> Void
     let onUndo: () -> Void
     let onParamChange: () -> Void
@@ -14,7 +15,7 @@ struct FileRenamerPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Drop Area
-            DropZoneView(folderURL: state.folderURL, onDrop: onFolderDrop)
+            DropZoneView(folderURL: state.folderURL, fileURLs: state.selectedFileURLs, onDrop: onTargetDrop)
                 .frame(height: 120)
 
             // Example Label
@@ -125,8 +126,10 @@ struct FileRenamerPane: View {
 
 struct DropZoneView: View {
     let folderURL: URL?
-    let onDrop: (URL) -> Void
+    let fileURLs: [URL]
+    let onDrop: ([URL]) -> Void
     @State private var isHovering = false
+    @State private var hasPasteableTargets = false
 
     var body: some View {
         ZStack {
@@ -138,7 +141,6 @@ struct DropZoneView: View {
                 Image(systemName: "folder.badge.plus")
                     .font(.system(size: 32, weight: .regular))
                     .foregroundColor(isHovering ? .accentColor : .secondary)
-                    .onTapGesture { appendFromPasteboard() }
                 
                 if let url = folderURL {
                     Text(url.lastPathComponent)
@@ -148,35 +150,105 @@ struct DropZoneView: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                } else if !fileURLs.isEmpty {
+                    VStack(spacing: 4) {
+                        ForEach(fileURLs.prefix(3), id: \.self) { url in
+                            Text(url.lastPathComponent)
+                                .font(.subheadline)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        if fileURLs.count > 3 {
+                            Text("等共 \(fileURLs.count) 个文件")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 } else {
-                    Text("目标文件夹 拖到这里...")
+                    Text(hasPasteableTargets ? "点这里，可粘贴..." : "文件/文件夹 拖到这里...")
                         .font(.headline)
                         .foregroundColor(.secondary)
                 }
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture { appendFromPasteboard() }
         .onDrop(of: [.fileURL], isTargeted: $isHovering) { providers in
-            _ = providers.first?.loadObject(ofClass: URL.self) { url, _ in
-                if let url = url {
-                    var isDir: ObjCBool = false
-                    if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-                        DispatchQueue.main.async {
-                            onDrop(url)
-                        }
-                    }
-                }
-            }
+            appendFromProviders(providers)
             return true
+        }
+        .onPasteCommand(of: [UTType.fileURL]) { providers in
+            appendFromProviders(providers)
+        }
+        .onAppear(perform: refreshPasteAvailability)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshPasteAvailability()
         }
     }
 
     private func appendFromPasteboard() {
         let classes: [AnyClass] = [NSURL.self]
-        guard let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL],
-              let url = urls.first else { return }
-        var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-            onDrop(url)
+        guard let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL] else { return }
+        let valid = validTargetURLs(urls)
+        guard !valid.isEmpty else {
+            refreshPasteAvailability()
+            return
         }
+        onDrop(valid)
+        refreshPasteAvailability()
+    }
+
+    private func appendFromProviders(_ providers: [NSItemProvider]) {
+        let group = DispatchGroup()
+        var loaded: [(Int, URL)] = []
+
+        for (index, provider) in providers.enumerated() {
+            group.enter()
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                DispatchQueue.main.async {
+                    defer { group.leave() }
+                    guard let url else { return }
+                    loaded.append((index, url))
+                }
+            }
+        }
+
+        group.notify(queue: .main) {
+            let urls = loaded.sorted { $0.0 < $1.0 }.map(\.1)
+            let valid = validTargetURLs(urls)
+            if !valid.isEmpty {
+                onDrop(valid)
+            }
+        }
+    }
+
+    private func refreshPasteAvailability() {
+        let classes: [AnyClass] = [NSURL.self]
+        let urls = NSPasteboard.general.readObjects(forClasses: classes, options: nil) as? [URL] ?? []
+        hasPasteableTargets = !validTargetURLs(urls).isEmpty
+    }
+
+    private func validTargetURLs(_ urls: [URL]) -> [URL] {
+        let fm = FileManager.default
+        var folders: [URL] = []
+        var files: [URL] = []
+
+        for url in urls {
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else { continue }
+            if isDir.boolValue {
+                folders.append(url)
+            } else {
+                files.append(url)
+            }
+        }
+
+        if folders.count == 1 && files.isEmpty {
+            return folders
+        }
+        if folders.isEmpty && !files.isEmpty {
+            return files
+        }
+        return []
     }
 }

@@ -1,0 +1,75 @@
+1. 批量打开链接
+      - “帮助”内容调整为（靠左）：
+            “
+            ## 用法：
+            1. 把链接放到文本框中。
+            2. 点击“开始”。
+            3. 按 [Enter] 打开下一批。
+            
+            ## 可直接复制到 文本框 测试：
+            -----------------------------------------------
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/rKN3fEtZW3dQtsizarp3s8.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/RmQVLkrxgm7JB9aKZ45jgd.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/zJAHHoEvLQtRTUSDDEeMfT.jpg
+            （多余文字，自动过滤）
+            001 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/p7fxZVJ64NDRDWzZKjrqXC.jpg
+            002 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oordGuRfowGGQ4xY7VnjyB.jpg
+            003 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/yK8qXhdThfuLRB9B5NxMyS.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/HVDEqXc3mKV84iiYp4uwfD.jpg 004
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/9fUvGnVYnusiiCj5PJVV9M.jpg 005
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oNtn9AAxFoZFHqPpUGDa5P.jpg 006
+
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/3XGBCoZX6zEjz4Rh3KWLwF.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oDdjU9CMguTmXZke5KzHz8.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/7bHcD5STZLNF5jbrna2KCE.jpg
+            （空行，自动过滤）
+
+            ......
+            ”
+2. 批量下载
+      - “帮助”内容调整为（靠左）：
+            “
+            ## 用法：
+            1. 把链接放到文本框中。
+            2. 点击“开始”。
+            3. 终端实时显示下载日志。
+
+            ## 可直接复制到 文本框 测试：
+            -----------------------------------------------
+            # 直接下载
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/3XGBCoZX6zEjz4Rh3KWLwF.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/rKN3fEtZW3dQtsizarp3s8.jpg
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/RmQVLkrxgm7JB9aKZ45jgd.jpg
+            
+            # 下载并重命名 (001.jpg, 002.jpg, 003.jpg)
+            001 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/p7fxZVJ64NDRDWzZKjrqXC.jpg
+            002 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oordGuRfowGGQ4xY7VnjyB.jpg
+            003 https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/yK8qXhdThfuLRB9B5NxMyS.jpg
+            
+            # 下载并重命名 (004.jpg, 005.jpg, 00 6.jpg)
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/HVDEqXc3mKV84iiYp4uwfD.jpg 004
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/9fUvGnVYnusiiCj5PJVV9M.jpg 005
+            https://metis-test.fbcontent.cn/metis-gnosis-evaluation/userImage/oNtn9AAxFoZFHqPpUGDa5P.jpg 006
+            （多余文字，自动过滤）
+            ......
+            # 下载pdf文件，并重命名
+            77 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/0b19b8060af5afdbf4b17f98e5f20cd8.pdf
+            88 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/5facc7f76b709431ed4b08ae1d7dff7c.pdf
+            99 https://metis-test.fbcontent.cn/metis-gnosis-production-external/opentextbook/smartedu/pdf/7ffce2c35024a9f8480ba6cf769ad850.pdf
+            ......
+            ”
+3. 侧边栏
+      - 点左上角的图标关闭/打开侧边栏时，侧边栏的宽度会变窄，改成默认一致宽度、侧边栏宽度不可调，且能恰好完整显示侧边栏的几个功能名字
+      - 打开/关闭侧边栏时，加个小动画，更丝滑、好看
+      - 切换侧边栏的几个功能时，加个小动画，更丝滑、好看
+4. 图片拼接
+      - 终端上下拖动时，拖拽区、中间的3个选项都不动，改成跟“每日分配”的终端一样的高度，且固定住高度、无法上下拖动
+      - 拖拽区也跟“每日分配”的拖拽区的高度一样
+5. AI&答题卡-检查
+      - 拖拽区的提示文字“已分配的...”，改成“线上每日任务表，复制一份，拖到这里...”
+      - “👉 已生成：Desktop/AI_check.xlsx ✅”改成“👉 已生成：Desktop/AI&答题卡_check.xlsx”；“帮助”中的相关内容也更新一下
+      - 终端的日志仍像这样：Toolbox/右侧文字没有左对齐.png，几次调整均失败，查找原因，把右边的“已生成..”等文字左对齐
+6. 每日分配
+      - “配置页”中的“共M人”放到“校准名单”的右侧
+      - “[截图] 已保存: 答题卡_search_fail_1781189497.png”，需要把截图保存到默认下载目录
+7. 完全改好之后打一版 apple 包 + intel 包，参考：Toolbox/AGENTS.md
