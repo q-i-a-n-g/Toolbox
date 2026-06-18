@@ -1,8 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 # 使用 onedir + Playwright 数据文件：onefile 大包在本机测试中出现长时间无响应，目录分发更稳定。
 
+import os
+import platform
 from PyInstaller.utils.hooks import collect_data_files
 
+target_arch = os.environ.get("PYINSTALLER_TARGET_ARCH", platform.machine())
 playwright_datas = collect_data_files("playwright")
 
 a_check = Analysis(
@@ -33,7 +36,7 @@ exe_check = EXE(
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch="universal2",
+    target_arch=target_arch,
     codesign_identity=None,
     entitlements_file=None,
 )
@@ -66,7 +69,7 @@ exe_daily = EXE(
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch="universal2",
+    target_arch=target_arch,
     codesign_identity=None,
     entitlements_file=None,
 )

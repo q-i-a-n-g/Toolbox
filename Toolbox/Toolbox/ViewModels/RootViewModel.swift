@@ -193,6 +193,9 @@ final class RootViewModel: ObservableObject {
 
         selectedTool = tool
         terminalText = ""
+        if tool.id != "open-links", zoomTarget == .terminal {
+            zoomTarget = .none
+        }
         resetToolSpecificState(for: tool)
         
         DispatchQueue.main.async { [weak self] in
@@ -249,6 +252,9 @@ final class RootViewModel: ObservableObject {
 
     func toggleZoom(for target: PaneZoomTarget) {
         if target == .text && !shouldShowTextPane {
+            return
+        }
+        if target == .terminal && selectedTool.id != "open-links" {
             return
         }
         // Selection state should be fast

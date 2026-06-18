@@ -17,6 +17,10 @@ from typing import List, Dict, Tuple
 # Suppress openpyxl UserWarning
 warnings.filterwarnings("ignore", category=UserWarning, module='openpyxl')
 
+if __name__ == "__main__" and not os.environ.get("DAILY_ASSIGN_FILES", "").strip():
+    print("E001：未检测到 有效 报名截图")
+    sys.exit(1)
+
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import PatternFill
 

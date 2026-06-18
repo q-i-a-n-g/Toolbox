@@ -25,8 +25,9 @@ rm -f Toolbox_AppleSilicon.zip Toolbox_Intel.zip
 thin_binary_if_possible() {
     local arch="$1"
     local path="$2"
-    if [ -f "$path" ] && lipo -info "$path" >/dev/null 2>&1; then
-        if lipo -info "$path" | grep -q "$arch"; then
+    local info=""
+    if [ -f "$path" ] && info="$(lipo -info "$path" 2>/dev/null)"; then
+        if echo "$info" | grep -q "Architectures in the fat file:" && echo "$info" | grep -q "$arch"; then
             lipo -thin "$arch" "$path" -output "$path.thin" && mv "$path.thin" "$path"
             chmod +x "$path"
         fi

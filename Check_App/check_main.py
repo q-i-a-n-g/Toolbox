@@ -3,6 +3,17 @@ import sys
 def _is_help_argv() -> bool:
     return "-h" in sys.argv or "--help" in sys.argv
 
+if _is_help_argv():
+    print("""usage: check_main.py [-h] [--base-files BASE_FILES [BASE_FILES ...]]
+                     --download-dir DOWNLOAD_DIR --output-file OUTPUT_FILE
+
+options:
+  -h, --help            show this help message and exit
+  --base-files BASE_FILES [BASE_FILES ...]
+  --download-dir DOWNLOAD_DIR
+  --output-file OUTPUT_FILE""")
+    sys.exit(0)
+
 # 立即打印启动信息（--help 时不打印，避免干扰 argparse）
 if not _is_help_argv():
     print(" - 正在扫描上传文件...")

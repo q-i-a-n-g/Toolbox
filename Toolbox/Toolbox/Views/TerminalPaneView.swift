@@ -7,6 +7,7 @@ struct TerminalPaneView: View {
     let showEditorControls: Bool
     let showHelpButton: Bool
     let showConfigButton: Bool
+    let showZoomButton: Bool
     let helpButtonTitle: String
     let configButtonTitle: String
     @Binding var isFocused: Bool
@@ -85,6 +86,13 @@ struct TerminalPaneView: View {
                 }
             }
 
+            if showZoomButton {
+                Button(action: onToggleZoom) {
+                    Image(systemName: isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                }
+                .buttonStyle(.borderless)
+                .help(isZoomed ? "恢复分栏" : "放大到最大")
+            }
         }
         .padding(.bottom, 10)
     }

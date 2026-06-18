@@ -107,7 +107,7 @@ struct ContentView: View {
                         }
                     } else if viewModel.zoomTarget == .text && viewModel.shouldShowTextPane {
                         textPane
-                    } else if viewModel.zoomTarget == .terminal || !viewModel.shouldShowTextPane {
+                    } else if (viewModel.zoomTarget == .terminal && viewModel.selectedTool.id == "open-links") || !viewModel.shouldShowTextPane {
                         terminalPane(showEditorControls: !viewModel.shouldShowTextPane)
                     } else {
                         VSplitView {
@@ -231,10 +231,11 @@ struct ContentView: View {
         return TerminalPaneView(
             outputText: viewModel.terminalText,
             isRunning: viewModel.isRunning,
-            isZoomed: viewModel.zoomTarget == .terminal,
+            isZoomed: viewModel.zoomTarget == .terminal && toolID == "open-links",
             showEditorControls: showEditorControls,
             showHelpButton: showHelp,
             showConfigButton: showConfig,
+            showZoomButton: toolID == "open-links",
             helpButtonTitle: viewModel.helpButtonTitle,
             configButtonTitle: viewModel.configButtonTitle,
             isFocused: $viewModel.isTerminalFocused,
