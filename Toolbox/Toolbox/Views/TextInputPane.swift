@@ -145,6 +145,8 @@ struct CopyableHelpPane: View {
     let isZoomed: Bool
     let onHelp: () -> Void
     let onToggleZoom: () -> Void
+    @State private var didCopy = false
+    @State private var copyFeedbackID = UUID()
 
     private let copyMarker = "## 可直接复制到 文本框 测试："
 
@@ -179,15 +181,29 @@ struct CopyableHelpPane: View {
 
                     if !copyableText.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            ZStack {
+                            ZStack(alignment: .trailing) {
                                 Text(copyMarker)
                                     .helpTextStyle()
                                     .frame(maxWidth: .infinity, alignment: .leading)
 
                                 Button(action: copyHelpText) {
-                                    Label("复制", systemImage: "doc.on.doc")
+                                    Label(didCopy ? "已复制" : "复制", systemImage: didCopy ? "checkmark.circle.fill" : "doc.on.doc")
+                                        .font(.system(size: 12, weight: didCopy ? .semibold : .regular))
+                                        .foregroundColor(didCopy ? .green : .primary)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(
+                                            Capsule()
+                                                .fill(didCopy ? Color.green.opacity(0.16) : Color.white.opacity(0.08))
+                                        )
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(didCopy ? Color.green.opacity(0.35) : Color.white.opacity(0.12), lineWidth: 1)
+                                        )
                                 }
                                 .buttonStyle(.borderless)
+                                .scaleEffect(didCopy ? 1.06 : 1)
+                                .animation(.spring(response: 0.18, dampingFraction: 0.7), value: didCopy)
                                 .help("复制测试内容")
                             }
 
@@ -235,6 +251,19 @@ struct CopyableHelpPane: View {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(copyBodyText, forType: .string)
+
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        let feedbackID = UUID()
+        copyFeedbackID = feedbackID
+        withAnimation(.spring(response: 0.18, dampingFraction: 0.72)) {
+            didCopy = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            guard copyFeedbackID == feedbackID else { return }
+            withAnimation(.easeOut(duration: 0.16)) {
+                didCopy = false
+            }
+        }
     }
 }
 

@@ -171,7 +171,7 @@ def _take_screenshot(page, name: str):
         print(f"[截图] 失败: {e}")
 
 
-def _wait_search_match(page, task_name: str, timeout_ms: int = 12000) -> tuple[bool, List[str]]:
+def _wait_search_match(page, task_name: str, timeout_ms: int = 6000) -> tuple[bool, List[str]]:
     expect = normalize_task_text(task_name)
     elapsed = 0
     sample: List[str] = []
@@ -263,7 +263,7 @@ def _download_one_table(page, url: str, task_name: str, target: Path, label: str
         except: pass
     except: pass
     
-    ok_filter, sample = _wait_search_match(page, task_name, timeout_ms=12000)
+    ok_filter, sample = _wait_search_match(page, task_name, timeout_ms=6000)
     if not ok_filter:
         print(f"E002：{label} 搜索结果匹配失败（期望：{task_name}）")
         _take_screenshot(page, f"{label}_search_fail")

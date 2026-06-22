@@ -3,6 +3,9 @@ import AppKit
 
 struct ContentView: View {
     @ObservedObject var viewModel: RootViewModel
+    @State private var textTerminalSplitFraction: CGFloat = 1.0 / 3.0
+    @State private var splitDragStartFraction: CGFloat?
+    @State private var isTextTerminalDividerHovering = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -109,6 +112,8 @@ struct ContentView: View {
                         textPane
                     } else if (viewModel.zoomTarget == .terminal && viewModel.selectedTool.id == "open-links") || !viewModel.shouldShowTextPane {
                         terminalPane(showEditorControls: !viewModel.shouldShowTextPane)
+                    } else if viewModel.selectedTool.id == "open-links" || viewModel.selectedTool.id == "download-images" {
+                        textTerminalSplitPane
                     } else {
                         VSplitView {
                             textPane
@@ -122,13 +127,9 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(red: 0.118, green: 0.118, blue: 0.118))
                 .overlay(alignment: .bottomTrailing) {
-                    Button(action: { viewModel.clearAllToolInputs() }) {
-                        Image("金银花1")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 110, height: 82)
+                    HoneysuckleClearButton(isEnabled: !viewModel.isRunning) {
+                        viewModel.clearAllToolInputs()
                     }
-                    .buttonStyle(.plain)
                     .padding(.trailing, 12)
                     .padding(.bottom, 138)
                 }
@@ -147,6 +148,71 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             viewModel.refocusTerminalAfterActivationIfNeeded()
         }
+    }
+
+    private var textTerminalSplitPane: some View {
+        GeometryReader { proxy in
+            let dividerHeight: CGFloat = 10
+            let availableHeight = max(proxy.size.height - dividerHeight, 0)
+            let topHeight = clampedTextTerminalTopHeight(availableHeight: availableHeight)
+            let bottomHeight = max(0, availableHeight - topHeight)
+
+            VStack(spacing: 0) {
+                textPane
+                    .frame(height: topHeight)
+
+                textTerminalDivider(availableHeight: availableHeight)
+                    .frame(height: dividerHeight)
+
+                terminalPane(showEditorControls: false)
+                    .frame(height: bottomHeight)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+    }
+
+    private func clampedTextTerminalTopHeight(availableHeight: CGFloat, fraction: CGFloat? = nil) -> CGFloat {
+        guard availableHeight > 0 else { return 0 }
+
+        let minTop = min(140, availableHeight * 0.45)
+        let minBottom = min(240, max(0, availableHeight - minTop))
+        let maxTop = max(minTop, availableHeight - minBottom)
+        let preferred = availableHeight * (fraction ?? textTerminalSplitFraction)
+        return min(max(preferred, minTop), maxTop)
+    }
+
+    private func textTerminalDivider(availableHeight: CGFloat) -> some View {
+        Rectangle()
+            .fill(isTextTerminalDividerHovering ? Color.accentColor.opacity(0.65) : Color.white.opacity(0.18))
+            .frame(height: isTextTerminalDividerHovering ? 2 : 1)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                withAnimation(.easeOut(duration: 0.12)) {
+                    isTextTerminalDividerHovering = hovering
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let startFraction = splitDragStartFraction ?? textTerminalSplitFraction
+                        if splitDragStartFraction == nil {
+                            splitDragStartFraction = startFraction
+                        }
+
+                        let startHeight = clampedTextTerminalTopHeight(
+                            availableHeight: availableHeight,
+                            fraction: startFraction
+                        )
+                        let proposedHeight = startHeight + value.translation.height
+                        guard availableHeight > 0 else { return }
+                        textTerminalSplitFraction = proposedHeight / availableHeight
+                    }
+                    .onEnded { _ in
+                        textTerminalSplitFraction = clampedTextTerminalTopHeight(availableHeight: availableHeight) / max(availableHeight, 1)
+                        splitDragStartFraction = nil
+                    }
+            )
     }
 
     @ViewBuilder
@@ -248,6 +314,84 @@ struct ContentView: View {
             canStart: canStart,
             startButtonTitle: toolID == "daily-assign" ? viewModel.dailyAssignStartButtonTitle : "开始"
         )
+    }
+}
+
+private struct HoneysuckleClearButton: View {
+    let isEnabled: Bool
+    let action: () -> Void
+
+    @State private var isHovering = false
+    @State private var showFeedback = false
+
+    var body: some View {
+        Button {
+            guard isEnabled else {
+                NSSound.beep()
+                return
+            }
+
+            action()
+            withAnimation(.spring(response: 0.18, dampingFraction: 0.72)) {
+                showFeedback = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    showFeedback = false
+                }
+            }
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(isHovering && isEnabled ? 0.08 : 0))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.white.opacity(isHovering && isEnabled ? 0.24 : 0), lineWidth: 1)
+                    )
+                    .frame(width: 110, height: 82)
+
+                Image("金银花1")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 110, height: 82)
+
+                if showFeedback {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(.green)
+                        .shadow(color: .black.opacity(0.35), radius: 3, x: 0, y: 1)
+                        .padding(.top, -2)
+                        .padding(.trailing, -2)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+        }
+        .buttonStyle(HoneysuckleButtonStyle(isEnabled: isEnabled))
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.14)) {
+                isHovering = hovering
+            }
+        }
+        .help(isEnabled ? "清空当前工具内容" : "运行中不能清空")
+        .accessibilityLabel("清空当前工具内容")
+    }
+}
+
+private struct HoneysuckleButtonStyle: ButtonStyle {
+    let isEnabled: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(isEnabled ? 1 : 0.48)
+            .scaleEffect(configuration.isPressed && isEnabled ? 0.92 : 1)
+            .shadow(
+                color: Color.black.opacity(configuration.isPressed && isEnabled ? 0.16 : 0.32),
+                radius: configuration.isPressed && isEnabled ? 2 : 6,
+                x: 0,
+                y: configuration.isPressed && isEnabled ? 1 : 3
+            )
+            .animation(.spring(response: 0.16, dampingFraction: 0.72), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.12), value: isEnabled)
     }
 }
 
