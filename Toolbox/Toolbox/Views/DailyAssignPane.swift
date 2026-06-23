@@ -350,8 +350,7 @@ struct StitchImagesPane: View {
             StitchFolderDropZone(folderURL: state.folderURL, onDrop: onFolderDrop)
                 .frame(height: 120)
 
-            Color.clear
-                .frame(height: 34)
+            Spacer(minLength: 0)
 
             HStack(spacing: 16) {
                 stitchModeButton(title: "上下\n两两拼接", mode: "1", layout: .vertical(count: 2))
@@ -360,7 +359,7 @@ struct StitchImagesPane: View {
             }
             .frame(maxWidth: .infinity)
 
-            Spacer(minLength: 20)
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)

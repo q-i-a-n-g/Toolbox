@@ -21,6 +21,7 @@ mkdir -p build
 rm -rf build/arm64 build/x86_64 build/Debug build/Release
 rm -f build/Toolbox_AppleSilicon.zip build/Toolbox_Intel.zip
 rm -f Toolbox_AppleSilicon.zip Toolbox_Intel.zip
+find Toolbox/Resources -name __pycache__ -type d -prune -exec rm -rf {} +
 
 thin_binary_if_possible() {
     local arch="$1"
@@ -53,6 +54,7 @@ xcodebuild -project Toolbox.xcodeproj -scheme "$SCHEME" -configuration Release \
 rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg_arm.zip"
 rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg_intel.zip"
 rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip"
+find "$BUILD_DIR/Toolbox.app" -name __pycache__ -type d -prune -exec rm -rf {} +
 # Strip symbols
 strip -x "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg" 2>/dev/null || true
 thin_check_pkg "$BUILD_ARCH" "$BUILD_DIR/Toolbox.app"

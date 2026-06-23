@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 
 enum PaneZoomTarget {
     case none
@@ -262,8 +263,50 @@ final class RootViewModel: ObservableObject {
     }
 
     func refocusTerminalAfterActivationIfNeeded() {
-        guard isRunning, selectedTool.id == "open-links" else { return }
-        isTerminalFocused = true
+        guard shouldRefocusTerminalForBrowserReturn(toolID: selectedTool.id) else { return }
+        requestTerminalFocus()
+    }
+
+    private func refocusToolboxAfterAutomatedBrowserRun(for toolID: String) {
+        guard shouldRefocusTerminalForBrowserReturn(toolID: toolID) else { return }
+
+        bringToolboxWindowToFront()
+        requestTerminalFocus(after: 0)
+        requestTerminalFocus(after: 0.15)
+        requestTerminalFocus(after: 0.4)
+        requestTerminalFocus(after: 0.8)
+    }
+
+    private func shouldRefocusTerminalForBrowserReturn(toolID: String) -> Bool {
+        toolID == "open-links" || toolID == "daily-assign" || toolID == "weekly-check"
+    }
+
+    private func bringToolboxWindowToFront() {
+        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        if let window = NSApplication.shared.windows.first(where: { $0.isVisible }) {
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func requestTerminalFocus(after delay: TimeInterval = 0) {
+        let focus = { [weak self] in
+            guard let self = self else { return }
+            self.isEditorFocused = false
+            self.isRenamerFocused = false
+            self.isTerminalFocused = false
+            DispatchQueue.main.async { [weak self] in
+                self?.isTerminalFocused = true
+            }
+        }
+
+        if delay <= 0 {
+            focus()
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                focus()
+            }
+        }
     }
 
     func updateEditorText(_ newValue: String) {
@@ -389,6 +432,7 @@ final class RootViewModel: ObservableObject {
         
         let configURL = fileStore.configURL(for: selectedTool)
 
+        let currentToolID = selectedTool.id
         let currentSessionID = UUID()
         self.runSessionID = currentSessionID
         
@@ -402,6 +446,7 @@ final class RootViewModel: ObservableObject {
         if selectedTool.id == "weekly-check" {
             let baseFilesPath = weeklyCheckFiles.map { $0.path }.joined(separator: "|")
             extraEnv["BASE_FILES"] = baseFilesPath
+            extraEnv["TOOLBOX_APP_PATH"] = Bundle.main.bundleURL.path
             
             let downloadDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?.path ?? ""
             extraEnv["DOWNLOAD_DIR"] = downloadDir
@@ -434,6 +479,7 @@ final class RootViewModel: ObservableObject {
             extraEnv["DAILY_ASSIGN_DOWNLOAD_MODE"] = "real"
             extraEnv["DAILY_ASSIGN_PREVIEW_ONLY"] = "0"
             extraEnv["DAILY_ASSIGN_CONFIRMED_SIGNUP"] = confirmedSignup
+            extraEnv["TOOLBOX_APP_PATH"] = Bundle.main.bundleURL.path
             extraEnv["DOWNLOAD_DIR"] = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?.path ?? ""
             extraEnv["OUTPUT_DIR"] = Bundle.main.bundleURL.deletingLastPathComponent().path
             if let ocrScript = Bundle.main.resourceURL?
@@ -490,9 +536,10 @@ final class RootViewModel: ObservableObject {
             onExit: { [weak self] status in
                 guard let self = self else { return }
                 Task { @MainActor in
-                    // Only set to false if it was actually running (avoid race with manual stop)
-                    if self.isRunning && self.runSessionID == currentSessionID {
+                    let isCurrentRun = self.isRunning && self.runSessionID == currentSessionID
+                    if isCurrentRun {
                         self.isRunning = false
+                        self.refocusToolboxAfterAutomatedBrowserRun(for: currentToolID)
                     }
                 }
             }

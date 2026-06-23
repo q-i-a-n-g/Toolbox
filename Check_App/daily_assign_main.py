@@ -71,6 +71,47 @@ def has_required_headers(path: Path) -> bool:
     return False
 
 
+def task_table_kind(path: Path) -> str | None:
+    try:
+        if path.stat().st_size < 1000:
+            return None
+        wb = load_workbook(path, data_only=True)
+        ws = wb.worksheets[0]
+        max_row = min(ws.max_row or 0, 80)
+        max_col = min(ws.max_column or 0, 20)
+        texts: List[str] = []
+        for row in ws.iter_rows(min_row=1, max_row=max_row, min_col=1, max_col=max_col, values_only=True):
+            for value in row:
+                if value is None:
+                    continue
+                text = str(value).strip()
+                if text:
+                    texts.append(text)
+        if not texts:
+            return None
+        joined = "\n".join(texts)
+        lower = joined.lower()
+        card_score = 0
+        ai_score = 0
+        if "cardpage" in lower:
+            card_score += 5
+        if "答题卡" in joined:
+            card_score += 4
+        if "holepage" in lower:
+            ai_score += 5
+        if "(auto)" in lower:
+            ai_score += 3
+        if "ai混合" in lower or "分数&ai" in lower:
+            ai_score += 3
+        if card_score > ai_score and card_score > 0:
+            return "card"
+        if ai_score > card_score and ai_score > 0:
+            return "ai"
+    except Exception:
+        return None
+    return None
+
+
 def classify(files: list[Path]):
     shots = []
     ai = None
@@ -82,9 +123,16 @@ def classify(files: list[Path]):
         if ext in IMG_EXT:
             shots.append(f)
         elif ext in XLS_EXT:
-            if ai is None and "AI_待分配" in name:
+            kind = task_table_kind(f)
+            if kind == "ai" and ai is None:
                 ai = f
-            elif card is None and "答题卡_待分配" in name:
+            elif kind == "card" and card is None:
+                card = f
+            elif kind is not None:
+                continue
+            elif kind is None and ai is None and "AI_待分配" in name:
+                ai = f
+            elif kind is None and card is None and "答题卡_待分配" in name:
                 card = f
             else:
                 others.append(f)
@@ -113,6 +161,56 @@ def mock_download(ai_target: Path, card_target: Path) -> tuple[bool, bool]:
             shutil.copy2(card_s, card_target)
             ok_card = True
     return ok_ai, ok_card
+
+
+def focus_toolbox_app():
+    app_path = os.environ.get("TOOLBOX_APP_PATH", "").strip()
+    script = """
+on run argv
+set targetPath to ""
+if (count of argv) > 0 then set targetPath to item 1 of argv
+try
+  if targetPath is not "" then
+    set appAlias to POSIX file targetPath as alias
+    tell application appAlias to activate
+  else
+    tell application id "local.liu.Toolbox" to activate
+  end if
+on error errMsg
+  try
+    tell application id "local.liu.Toolbox" to activate
+  on error
+    tell application "Toolbox" to activate
+  end try
+end try
+try
+  tell application "System Events"
+    set frontmost of first application process whose bundle identifier is "local.liu.Toolbox" to true
+  end tell
+end try
+end run
+"""
+    for delay in (0, 0.2, 0.6):
+        if delay:
+            time.sleep(delay)
+        try:
+            if app_path and os.path.exists(app_path):
+                subprocess.run(
+                    ["/usr/bin/open", app_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=3,
+                    check=False,
+                )
+            subprocess.run(
+                ["/usr/bin/osascript", "-e", script, app_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+                check=False,
+            )
+        except Exception:
+            pass
 
 
 def normalize_task_text(text: str) -> str:
@@ -171,7 +269,15 @@ def _take_screenshot(page, name: str):
         print(f"[截图] 失败: {e}")
 
 
-def _wait_search_match(page, task_name: str, timeout_ms: int = 6000) -> tuple[bool, List[str]]:
+SUBJECT_SUFFIX_RE = re.compile(r"(小学|初中|高中)(语文|数学|英语|物理|化学|生物|科学|历史|地理|政治|道德与法治)$")
+
+
+def has_subject_suffix(task_name: str) -> bool:
+    normalized = normalize_task_text(task_name).rstrip(")）]")
+    return bool(SUBJECT_SUFFIX_RE.search(normalized))
+
+
+def _wait_search_match(page, task_name: str, timeout_ms: int = 6000, require_subject_suffix: bool = False) -> tuple[bool, List[str]]:
     expect = normalize_task_text(task_name)
     elapsed = 0
     sample: List[str] = []
@@ -179,11 +285,36 @@ def _wait_search_match(page, task_name: str, timeout_ms: int = 6000) -> tuple[bo
         rows = _query_visible_task_names(page)
         if rows:
             sample = rows[:8]
-            if any(expect and expect in normalize_task_text(r) for r in rows):
+            if any(
+                expect and expect in normalize_task_text(r) and (not require_subject_suffix or has_subject_suffix(r))
+                for r in rows
+            ):
                 return True, sample
         page.wait_for_timeout(500)
         elapsed += 500
     return False, sample
+
+
+def _best_subject_task_name_from_page(page, keyword: str = "Auto") -> str | None:
+    expect = normalize_task_text(keyword)
+    for row in _query_visible_task_names(page):
+        text = str(row).strip()
+        if expect and expect not in normalize_task_text(text):
+            continue
+        if has_subject_suffix(text):
+            return text
+    return None
+
+
+def _matched_task_names(rows: List[str], task_name: str, require_subject_suffix: bool = False) -> List[str]:
+    expect = normalize_task_text(task_name)
+    return [
+        str(row).strip()
+        for row in rows
+        if expect
+        and expect in normalize_task_text(row)
+        and (not require_subject_suffix or has_subject_suffix(row))
+    ]
 
 
 def _visible_button_by_text(page, wanted: str):
@@ -225,7 +356,106 @@ def _click_export_button(page) -> bool:
         return False
 
 
-def _download_one_table(page, url: str, task_name: str, target: Path, label: str) -> bool:
+def _set_input_value(page, selector: str, value: str, timeout: int = 20000) -> bool:
+    try:
+        page.wait_for_selector(selector, timeout=timeout)
+        page.fill(selector, "")
+        page.type(selector, value, delay=8)
+        return True
+    except Exception:
+        return False
+
+
+def _set_create_time_range(page, start_time: str, end_time: str) -> bool:
+    try:
+        inputs = page.locator(".ant-picker-range input")
+        inputs.first.wait_for(state="visible", timeout=8000)
+        page.evaluate(
+            """() => {
+                document.querySelectorAll('.ant-picker-range input').forEach((el) => {
+                    el.removeAttribute('readonly');
+                });
+            }"""
+        )
+        inputs.nth(0).click(force=True)
+        inputs.nth(0).fill(start_time, force=True)
+        page.keyboard.press("Tab")
+        inputs.nth(1).fill(end_time, force=True)
+        page.keyboard.press("Enter")
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(250)
+        values = inputs.evaluate_all("(els) => els.map((el) => el.value)")
+        return len(values) >= 2 and values[0] == start_time and values[1] == end_time
+    except Exception:
+        return False
+
+
+def _apply_search_conditions(page, task_name: str, label: str, create_time_range: tuple[str, str] | None = None) -> bool:
+    if not _set_input_value(page, 'input#name, input[placeholder*="任务名"]', task_name):
+        print(f"E002：无法在 {label} 页面输入任务名")
+        _take_screenshot(page, f"{label}_input_fail")
+        return False
+    if create_time_range is not None:
+        start_time, end_time = create_time_range
+        if not _set_create_time_range(page, start_time, end_time):
+            print(f"E002：无法在 {label} 页面输入创建时间")
+            _take_screenshot(page, f"{label}_time_fail")
+            return False
+    return True
+
+
+def _trigger_search(page):
+    try:
+        search_btn = _visible_button_by_text(page, "搜索")
+        if search_btn is not None:
+            search_btn.click()
+        else:
+            page.keyboard.press("Enter")
+
+        page.wait_for_timeout(300)
+        try:
+            loading = page.locator('.ant-spin-spinning, .ant-loading, .ant-table-loading')
+            if loading.count() > 0:
+                loading.first.wait_for(state="hidden", timeout=6000)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _wait_before_export(page, task_name: str, label: str, require_subject_suffix: bool = False) -> None:
+    start = time.monotonic()
+    last_signature = ""
+    stable_count = 0
+    min_delay_ms = 3000
+    timeout_ms = 9000
+    while (time.monotonic() - start) * 1000 <= timeout_ms:
+        rows = _query_visible_task_names(page)
+        matches = _matched_task_names(rows, task_name, require_subject_suffix)
+        signature = "|".join(matches[:8])
+        if signature and signature == last_signature:
+            stable_count += 1
+        else:
+            stable_count = 0
+            last_signature = signature
+
+        elapsed_ms = (time.monotonic() - start) * 1000
+        if elapsed_ms >= min_delay_ms and stable_count >= 1:
+            return
+        page.wait_for_timeout(500)
+
+    print(f"[下载] {label} 搜索结果已出现，等待导出控件稳定后继续")
+
+
+def _download_one_table(
+    page,
+    url: str,
+    task_name: str,
+    target: Path,
+    label: str,
+    create_time_range: tuple[str, str] | None = None,
+    require_subject_suffix: bool = False,
+) -> bool:
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(1200)
@@ -235,82 +465,88 @@ def _download_one_table(page, url: str, task_name: str, target: Path, label: str
     
     page.bring_to_front()
     _close_open_modals(page)
-    
-    # 1. Input Task Name
-    try:
-        input_sel = 'input#name, input[placeholder*="任务名"]'
-        page.wait_for_selector(input_sel, timeout=20000)
-        page.fill(input_sel, "")
-        page.type(input_sel, task_name, delay=8)
-    except Exception:
-        print(f"E002：无法在 {label} 页面输入任务名")
-        _take_screenshot(page, f"{label}_input_fail")
-        return False
-            
-    # 2) 搜索
-    try:
-        search_btn = _visible_button_by_text(page, "搜索")
-        if search_btn is not None:
-            search_btn.click()
-        else:
-            page.keyboard.press("Enter")
-        
-        page.wait_for_timeout(300)
-        try:
-            loading = page.locator('.ant-spin-spinning, .ant-loading, .ant-table-loading')
-            if loading.count() > 0:
-                loading.first.wait_for(state="hidden", timeout=6000)
-        except: pass
-    except: pass
-    
-    ok_filter, sample = _wait_search_match(page, task_name, timeout_ms=6000)
-    if not ok_filter:
-        print(f"E002：{label} 搜索结果匹配失败（期望：{task_name}）")
-        _take_screenshot(page, f"{label}_search_fail")
-        return False
-    
-    # 3) 导出
-    if not _click_export_button(page):
-        print(f"E002：{label} 点击导出按钮失败")
-        _take_screenshot(page, f"{label}_export_fail")
-        return False
-        
-    # 4) 确认弹窗并下载
-    try:
-        modal = page.locator(".ant-modal:visible").last
-        modal.wait_for(state="visible", timeout=5000)
-        page.wait_for_timeout(120)
-        
-        with page.expect_download(timeout=60000) as download_info:
-            confirm = modal.locator('.ant-modal-footer button.ant-btn-primary').last
-            if confirm.count() > 0 and confirm.is_visible(timeout=1200):
-                confirm.click(force=True, timeout=5000)
-            else:
-                page.keyboard.press("Enter")
-        
-        download = download_info.value
-        tmp_target = target.with_suffix(target.suffix + ".download")
-        if tmp_target.exists():
-            tmp_target.unlink()
-        download.save_as(str(tmp_target))
-        if not tmp_target.exists() or tmp_target.stat().st_size < 500:
-            print(f"E002：{label} 下载文件不完整")
+
+    attempted: list[str] = []
+    current_task_name = task_name
+    for attempt in range(2 if require_subject_suffix else 1):
+        attempted.append(current_task_name)
+        if not _apply_search_conditions(page, current_task_name, label, create_time_range):
             return False
-        if target.exists():
-            target.unlink()
-        tmp_target.replace(target)
-        
-        # Strict content check to ensure it's not the "wrong" file
-        if not validate_downloaded_task(target, task_name):
-            print(f"E002：{label} 下载内容与目标任务不符（可能下载了全部数据或缓存数据）")
+
+        _trigger_search(page)
+
+        ok_filter, _ = _wait_search_match(
+            page,
+            current_task_name,
+            timeout_ms=6000,
+            require_subject_suffix=require_subject_suffix,
+        )
+        if not ok_filter:
+            print(f"E002：{label} 搜索结果匹配失败（期望：{current_task_name}）")
+            _take_screenshot(page, f"{label}_search_fail")
             return False
-            
-        print(f"[下载] {label} 任务下载成功 ✅")
-        return True
-    except Exception as e:
-        print(f"E002：{label} 下载确认超时或失败 ({e})")
-        _take_screenshot(page, f"{label}_final_fail")
-        return False
+
+        _wait_before_export(page, current_task_name, label, require_subject_suffix)
+
+        for export_attempt in range(2):
+            if not _click_export_button(page):
+                print(f"E002：{label} 点击导出按钮失败")
+                _take_screenshot(page, f"{label}_export_fail")
+                return False
+
+            try:
+                modal = page.locator(".ant-modal:visible").last
+                modal.wait_for(state="visible", timeout=5000)
+                page.wait_for_timeout(120)
+
+                with page.expect_download(timeout=60000) as download_info:
+                    confirm = modal.locator('.ant-modal-footer button.ant-btn-primary').last
+                    if confirm.count() > 0 and confirm.is_visible(timeout=1200):
+                        confirm.click(force=True, timeout=5000)
+                    else:
+                        page.keyboard.press("Enter")
+
+                download = download_info.value
+                tmp_target = target.with_suffix(target.suffix + ".download")
+                if tmp_target.exists():
+                    tmp_target.unlink()
+                download.save_as(str(tmp_target))
+                if not tmp_target.exists() or tmp_target.stat().st_size < 500:
+                    print(f"E002：{label} 下载文件不完整")
+                    return False
+                if target.exists():
+                    target.unlink()
+                tmp_target.replace(target)
+
+                if validate_downloaded_task(target, current_task_name, require_subject_suffix=require_subject_suffix):
+                    print(f"[下载] {label} 任务下载成功 ✅")
+                    return True
+
+                if require_subject_suffix and attempt == 0:
+                    corrected = _best_subject_task_name_from_page(page, task_name)
+                    if corrected and corrected not in attempted:
+                        print(f"[下载] {label} 下载内容缺少学科后缀，改用任务名关键词重新搜索: {corrected}")
+                        current_task_name = corrected
+                        break
+
+                if export_attempt == 0:
+                    print(f"[下载] {label} 导出内容未匹配当前筛选，重新搜索后再试一次")
+                    _close_open_modals(page)
+                    _trigger_search(page)
+                    _wait_before_export(page, current_task_name, label, require_subject_suffix)
+                    continue
+
+                print(f"E002：{label} 下载内容与目标任务不符（可能下载了全部数据或缓存数据）")
+                return False
+            except Exception as e:
+                print(f"E002：{label} 下载确认超时或失败 ({e})")
+                _take_screenshot(page, f"{label}_final_fail")
+                return False
+
+        if require_subject_suffix and attempted[-1] != current_task_name:
+            continue
+
+    return False
 
 
 def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: str) -> tuple[bool, bool]:
@@ -333,9 +569,25 @@ def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: s
             )
             page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
 
-            ok1 = _download_one_table(page, "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage", ai_task, ai_target, "AI")
-            ok2 = _download_one_table(page, "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card", card_task, card_target, "答题卡")
+            ok1 = _download_one_table(
+                page,
+                "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage",
+                ai_task,
+                ai_target,
+                "AI",
+                create_time_range=task_create_time_range(date.today()),
+                require_subject_suffix=True,
+            )
+            ok2 = _download_one_table(
+                page,
+                "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card",
+                card_task,
+                card_target,
+                "答题卡",
+                create_time_range=task_create_time_range(date.today()),
+            )
             browser_context.close()
+            focus_toolbox_app()
             return ok1, ok2
     except Exception as e:
         print(f"E002：自动下载过程异常 ({e})")
@@ -349,32 +601,43 @@ def to_num(v) -> float:
     except: return 0.0
 
 
-def validate_downloaded_task(path: Path, expected_task_name: str) -> bool:
+def downloaded_task_names(path: Path) -> list[str]:
     try:
         wb = load_workbook(path, data_only=True)
         ws = wb.worksheets[0]
         header_row, task_col = None, None
+        wanted_headers = {"任务名称", "任务名"}
         for r in range(1, min(20, ws.max_row) + 1):
             for c in range(1, min(20, ws.max_column) + 1):
-                if str(ws.cell(r, c).value or "").strip() == "任务名称":
+                if str(ws.cell(r, c).value or "").strip() in wanted_headers:
                     header_row, task_col = r, c
                     break
             if header_row is not None:
                 break
         if header_row is None or task_col is None:
-            return False
+            return []
         names = []
         for r in range(header_row + 1, ws.max_row + 1):
             v = str(ws.cell(r, task_col).value or "").strip()
             if v:
                 names.append(v)
+        return names
+    except Exception:
+        return []
+
+
+def validate_downloaded_task(path: Path, expected_task_name: str, require_subject_suffix: bool = False) -> bool:
+    try:
+        names = downloaded_task_names(path)
         if not names:
             return False
         expect = normalize_task_text(expected_task_name)
-        if any(expect and expect in normalize_task_text(n) for n in names):
-            return True
-        hits = sum(1 for n in names if expected_task_name in n)
-        return hits > 0
+        matched = [n for n in names if expect and expect in normalize_task_text(n)]
+        if not matched:
+            return False
+        if require_subject_suffix and not any(has_subject_suffix(n) for n in matched):
+            return False
+        return True
     except Exception:
         return False
 
@@ -550,7 +813,7 @@ def load_signup_texts(shots: List[Path]) -> List[str]:
 
 def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[str, int], List[str], List[str]]:
     out: Dict[str, int] = {}
-    first_pos: Dict[str, int] = {}
+    latest_pos: Dict[str, int] = {}
     unmatched: List[str] = []
     unmatched_pos: Dict[str, int] = {}
     noise = {"所有人", "完成", "周五", "周一", "周二", "周三", "周四", "周六", "周日", "评测", "比例", "请大家", "今天", "任务", "表格", "下载", "报名", "自动", "👉", "人数", "约有", "需在", "评测组"}
@@ -558,8 +821,7 @@ def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[s
     def remember(name: str, count: int, pos: int):
         if count not in (2, 3, 5):
             return
-        if name not in first_pos or pos < first_pos[name]:
-            first_pos[name] = pos
+        latest_pos[name] = pos
         out[name] = count
         if name in unmatched:
             unmatched.remove(name)
@@ -612,7 +874,7 @@ def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[s
             if cnt > 0:
                 remember(norm, cnt, shot_offset + match.start())
 
-    order = sorted(out.keys(), key=lambda name: (first_pos.get(name, 10**12), name))
+    order = sorted(out.keys(), key=lambda name: (latest_pos.get(name, 10**12), name))
     unmatched.sort(key=lambda name: (unmatched_pos.get(name, 10**12), name))
     return out, unmatched, order
 
@@ -827,17 +1089,15 @@ def split_signup_for_linked_mode(ai_tasks: List[TaskRow], card_tasks: List[TaskR
 
 
 def ai_task_name(today: date) -> str:
-    yesterday = today - timedelta(days=1)
-    return f"{yesterday:%y%m%d}-{today:%y%m%d}"
+    return "Auto"
+
+
+def task_create_time_range(today: date) -> tuple[str, str]:
+    return f"{today:%Y-%m-%d} 10:00:00", f"{today:%Y-%m-%d} 19:00:00"
 
 
 def card_task_name(today: date) -> str:
-    # The saved production examples use Thursday-Wednesday cycles:
-    # 2026-05-07..2026-05-13 and 2026-05-14..2026-05-20.
-    days_since_thursday = (today.weekday() - 3) % 7
-    start = today - timedelta(days=days_since_thursday)
-    end = start + timedelta(days=6)
-    return f"{start:%m%d}-{end:%m%d}答题卡周期评测"
+    return "答题卡周期评测"
 
 
 def delivery_text(today: date) -> str:
@@ -904,8 +1164,11 @@ def main() -> int:
     dl_dir.mkdir(parents=True, exist_ok=True)
     if ai is None and card is None:
         print("[下载] 检测到仅上传截图，开始自动下载今日任务表...")
+        ai_start, ai_end = task_create_time_range(date.today())
         print(f"[下载] AI任务名: {ai_task_name(date.today())}")
+        print(f"[下载] AI创建时间: {ai_start}、{ai_end}")
         print(f"[下载] 答题卡任务名: {card_task_name(date.today())}")
+        print(f"[下载] 答题卡创建时间: {ai_start}、{ai_end}")
         ai_path, card_path = dl_dir / "AI_待分配.xlsx", dl_dir / "答题卡_待分配.xlsx"
         mode = os.environ.get("DAILY_ASSIGN_DOWNLOAD_MODE", "disabled").strip().lower()
         ok_ai, ok_card = False, False

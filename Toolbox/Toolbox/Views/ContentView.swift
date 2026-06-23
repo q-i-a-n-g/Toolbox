@@ -3,9 +3,6 @@ import AppKit
 
 struct ContentView: View {
     @ObservedObject var viewModel: RootViewModel
-    @State private var textTerminalSplitFraction: CGFloat = 1.0 / 3.0
-    @State private var splitDragStartFraction: CGFloat?
-    @State private var isTextTerminalDividerHovering = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -45,11 +42,13 @@ struct ContentView: View {
                                 terminalPane(showEditorControls: false)
                             }
                         } else {
-                            VSplitView {
+                            fixedTopTerminalSplitPane(
+                                topHeight: commonTopPaneHeight,
+                                minTop: 148
+                            ) {
                                 WeeklyCheckPane(files: $viewModel.weeklyCheckFiles)
-                                    .frame(minHeight: 120, idealHeight: 170)
+                            } bottom: {
                                 terminalPane(showEditorControls: false)
-                                    .frame(minHeight: 220, idealHeight: 340)
                             }
                         }
                     } else if viewModel.selectedTool.id == "daily-assign" {
@@ -73,7 +72,10 @@ struct ContentView: View {
                                 onRemove: viewModel.removeDailyAssignRow
                             )
                         } else {
-                            VSplitView {
+                            fixedTopTerminalSplitPane(
+                                topHeight: commonTopPaneHeight,
+                                minTop: 220
+                            ) {
                                 DailyAssignPane(
                                     files: $viewModel.dailyAssignFiles,
                                     settings: $viewModel.dailyAssignSettings,
@@ -87,39 +89,37 @@ struct ContentView: View {
                                     onReset: viewModel.resetDailyAssignRowsToOCR,
                                     onRemove: viewModel.removeDailyAssignRow
                                 )
-                                .frame(
-                                    minHeight: viewModel.dailyAssignStage == .confirming ? 360 : 220,
-                                    idealHeight: viewModel.dailyAssignStage == .confirming ? 460 : 260
-                                )
+                            } bottom: {
                                 terminalPane(showEditorControls: false)
-                                    .frame(
-                                        minHeight: 84,
-                                        idealHeight: viewModel.dailyAssignStage == .confirming ? 190 : 180
-                                    )
                             }
                         }
                     } else if viewModel.selectedTool.id == "stitch-images" {
-                        VStack(spacing: 10) {
+                        fixedTopTerminalSplitPane(
+                            topHeight: commonTopPaneHeight,
+                            minTop: 220
+                        ) {
                             StitchImagesPane(
                                 state: $viewModel.stitchImagesState,
                                 onFolderDrop: viewModel.updateStitchImagesFolder
                             )
-                            .frame(height: 270)
+                        } bottom: {
                             terminalPane(showEditorControls: false)
-                                .frame(maxHeight: .infinity)
                         }
                     } else if viewModel.zoomTarget == .text && viewModel.shouldShowTextPane {
                         textPane
                     } else if (viewModel.zoomTarget == .terminal && viewModel.selectedTool.id == "open-links") || !viewModel.shouldShowTextPane {
                         terminalPane(showEditorControls: !viewModel.shouldShowTextPane)
                     } else if viewModel.selectedTool.id == "open-links" || viewModel.selectedTool.id == "download-images" {
-                        textTerminalSplitPane
-                    } else {
-                        VSplitView {
+                        fixedTopTerminalSplitPane {
                             textPane
-                                .frame(minHeight: 120, idealHeight: 170)
+                        } bottom: {
                             terminalPane(showEditorControls: false)
-                                .frame(minHeight: 220, idealHeight: 340)
+                        }
+                    } else {
+                        fixedTopTerminalSplitPane {
+                            textPane
+                        } bottom: {
+                            terminalPane(showEditorControls: false)
                         }
                     }
                 }
@@ -150,69 +150,44 @@ struct ContentView: View {
         }
     }
 
-    private var textTerminalSplitPane: some View {
+    private var commonTopPaneHeight: CGFloat {
+        252
+    }
+
+    private func fixedTopTerminalSplitPane<Top: View, Bottom: View>(
+        topHeight: CGFloat? = nil,
+        minTop: CGFloat = 140,
+        minBottom: CGFloat = 180,
+        @ViewBuilder top: @escaping () -> Top,
+        @ViewBuilder bottom: @escaping () -> Bottom
+    ) -> some View {
         GeometryReader { proxy in
-            let dividerHeight: CGFloat = 10
-            let availableHeight = max(proxy.size.height - dividerHeight, 0)
-            let topHeight = clampedTextTerminalTopHeight(availableHeight: availableHeight)
+            let availableHeight = max(proxy.size.height, 0)
+            let topHeight = fixedTopHeight(
+                availableHeight: availableHeight,
+                preferredTop: topHeight ?? commonTopPaneHeight,
+                minTop: minTop,
+                minBottom: minBottom
+            )
             let bottomHeight = max(0, availableHeight - topHeight)
 
             VStack(spacing: 0) {
-                textPane
+                top()
                     .frame(height: topHeight)
 
-                textTerminalDivider(availableHeight: availableHeight)
-                    .frame(height: dividerHeight)
-
-                terminalPane(showEditorControls: false)
+                bottom()
                     .frame(height: bottomHeight)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
     }
 
-    private func clampedTextTerminalTopHeight(availableHeight: CGFloat, fraction: CGFloat? = nil) -> CGFloat {
+    private func fixedTopHeight(availableHeight: CGFloat, preferredTop: CGFloat, minTop: CGFloat, minBottom: CGFloat) -> CGFloat {
         guard availableHeight > 0 else { return 0 }
-
-        let minTop = min(140, availableHeight * 0.45)
-        let minBottom = min(240, max(0, availableHeight - minTop))
-        let maxTop = max(minTop, availableHeight - minBottom)
-        let preferred = availableHeight * (fraction ?? textTerminalSplitFraction)
-        return min(max(preferred, minTop), maxTop)
-    }
-
-    private func textTerminalDivider(availableHeight: CGFloat) -> some View {
-        Rectangle()
-            .fill(isTextTerminalDividerHovering ? Color.accentColor.opacity(0.65) : Color.white.opacity(0.18))
-            .frame(height: isTextTerminalDividerHovering ? 2 : 1)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .onHover { hovering in
-                withAnimation(.easeOut(duration: 0.12)) {
-                    isTextTerminalDividerHovering = hovering
-                }
-            }
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        let startFraction = splitDragStartFraction ?? textTerminalSplitFraction
-                        if splitDragStartFraction == nil {
-                            splitDragStartFraction = startFraction
-                        }
-
-                        let startHeight = clampedTextTerminalTopHeight(
-                            availableHeight: availableHeight,
-                            fraction: startFraction
-                        )
-                        let proposedHeight = startHeight + value.translation.height
-                        guard availableHeight > 0 else { return }
-                        textTerminalSplitFraction = proposedHeight / availableHeight
-                    }
-                    .onEnded { _ in
-                        textTerminalSplitFraction = clampedTextTerminalTopHeight(availableHeight: availableHeight) / max(availableHeight, 1)
-                        splitDragStartFraction = nil
-                    }
-            )
+        let clampedMinTop = min(minTop, availableHeight)
+        let clampedMinBottom = min(minBottom, max(0, availableHeight - clampedMinTop))
+        let maxTop = max(clampedMinTop, availableHeight - clampedMinBottom)
+        return min(max(preferredTop, clampedMinTop), maxTop)
     }
 
     @ViewBuilder

@@ -24,6 +24,7 @@ import os
 import argparse
 import unicodedata
 import time
+import subprocess
 from collections import defaultdict
 from pathlib import Path
 
@@ -58,6 +59,63 @@ def pad_display(s, width):
 
 def log_status(label, status, width=42):
     print(f"{pad_display(label, width)}{status}")
+
+DEBUG_TIMING = os.environ.get("TOOLBOX_WEEKLY_DEBUG_TIMING") == "1"
+
+def debug_timing(start_time, label):
+    if DEBUG_TIMING:
+        print(f"[耗时] {label}: {time.perf_counter() - start_time:.2f}s")
+        sys.stdout.flush()
+
+
+def focus_toolbox_app():
+    app_path = os.environ.get("TOOLBOX_APP_PATH", "").strip()
+    script = """
+on run argv
+set targetPath to ""
+if (count of argv) > 0 then set targetPath to item 1 of argv
+try
+  if targetPath is not "" then
+    set appAlias to POSIX file targetPath as alias
+    tell application appAlias to activate
+  else
+    tell application id "local.liu.Toolbox" to activate
+  end if
+on error errMsg
+  try
+    tell application id "local.liu.Toolbox" to activate
+  on error
+    tell application "Toolbox" to activate
+  end try
+end try
+try
+  tell application "System Events"
+    set frontmost of first application process whose bundle identifier is "local.liu.Toolbox" to true
+  end tell
+end try
+end run
+"""
+    for delay in (0, 0.2, 0.6):
+        if delay:
+            time.sleep(delay)
+        try:
+            if app_path and os.path.exists(app_path):
+                subprocess.run(
+                    ["/usr/bin/open", app_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=3,
+                    check=False,
+                )
+            subprocess.run(
+                ["/usr/bin/osascript", "-e", script, app_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+                check=False,
+            )
+        except Exception:
+            pass
 
 # ── 工具函数 ─────────────────────────────────────────────────────────────
 def read_sheet(ws):
@@ -119,14 +177,39 @@ def apply_format(ws, yellow_cols=None, skip_width_col=None):
             cell = ws.cell(ri, ci)
             if cell.value is not None: cell.font = FONT
 
+DOWNLOAD_HEADER_CHECKERS = {
+    "分数.xlsx": lambda h: "题目框识别情况" in h and "是否有分数框" in h and "大题ID" in h,
+    "AI.xlsx": lambda h: "阶段" in h and "科目" in h and "任务名" in h,
+    "答题卡-分数.xlsx": lambda h: "答案框识别情况" in h and "分数框识别情况" in h and "题目框识别情况" not in h,
+    "答题卡-AI.xlsx": lambda h: "任务名" in h and "任务id" in h and "手写识别" in h and "阶段" not in h,
+}
+
+def first_row_header_set(ws):
+    try:
+        row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
+    except StopIteration:
+        return set()
+    return {str(c) if c is not None else "" for c in row}
+
+def downloaded_file_matches(path, expected_name):
+    checker = DOWNLOAD_HEADER_CHECKERS.get(expected_name)
+    if checker is None:
+        return True
+    try:
+        wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+        try:
+            for sname in wb.sheetnames:
+                if checker(first_row_header_set(wb[sname])):
+                    return True
+        finally:
+            wb.close()
+    except Exception:
+        return False
+    return False
+
 # ── 数据扫描 ──────────────────────────────────────────────────────────────
 def scan_download_dir(download_dir):
-    NAMED_HEADERS = {
-        "分数.xlsx":      lambda h: "题目框识别情况" in h and "是否有分数框" in h and "大题ID" in h,
-        "AI.xlsx":        lambda h: "阶段" in h and "科目" in h and "任务名" in h,
-        "答题卡-分数.xlsx": lambda h: "答案框识别情况" in h and "分数框识别情况" in h and "题目框识别情况" not in h,
-        "答题卡-AI.xlsx":  lambda h: "任务名" in h and "任务id" in h and "手写识别" in h and "阶段" not in h,
-    }
+    NAMED_HEADERS = dict(DOWNLOAD_HEADER_CHECKERS)
     named_data = {} 
 
     if not os.path.exists(download_dir): return named_data
@@ -229,6 +312,7 @@ def auto_download_files(url1, url2, download_dir, label_width):
     
     try:
         with sync_playwright() as p:
+            timing_start = time.perf_counter()
             browser_context = p.chromium.launch_persistent_context(
                 user_data_dir=user_data_dir, executable_path=chrome_path,
                 headless=False, no_viewport=True, accept_downloads=True,
@@ -236,32 +320,118 @@ def auto_download_files(url1, url2, download_dir, label_width):
             )
             page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
 
-            def save_download(download_obj, target_path):
-                old_mtime = os.path.getmtime(target_path) if os.path.exists(target_path) else 0
+            def save_download(download_obj, target_path, expected_name):
                 if os.path.exists(target_path):
                     os.remove(target_path)
                 download_obj.save_as(target_path)
-                if not os.path.exists(target_path):
+                if not os.path.exists(target_path) or os.path.getsize(target_path) <= 0:
                     return False
-                new_mtime = os.path.getmtime(target_path)
-                return new_mtime > old_mtime and os.path.getsize(target_path) > 0
+                ok = downloaded_file_matches(target_path, expected_name)
+                if not ok:
+                    try:
+                        os.remove(target_path)
+                    except OSError:
+                        pass
+                return ok
+
+            def first_clickable_button(text):
+                locators = [
+                    page.get_by_role("button", name=text),
+                    page.locator(f"button:has-text('{text}')"),
+                ]
+                for locator in locators:
+                    try:
+                        count = min(locator.count(), 4)
+                    except Exception:
+                        count = 0
+                    for idx in range(count):
+                        btn = locator.nth(idx)
+                        try:
+                            if not btn.is_visible(timeout=500):
+                                continue
+                            btn.scroll_into_view_if_needed(timeout=1000)
+                            if btn.is_enabled(timeout=500):
+                                return btn
+                        except Exception:
+                            continue
+                return None
+
+            def download_by_button_text(button_text, target_file, total_timeout=60000, attempts=3):
+                target_path = os.path.join(download_dir, target_file)
+                deadline = time.monotonic() + (total_timeout / 1000.0)
+                per_attempt_timeout = max(1000, total_timeout // max(attempts, 1))
+
+                def remaining_ms():
+                    return max(0, int((deadline - time.monotonic()) * 1000))
+
+                def wait_for_detail_ready():
+                    texts = ["导出评测详情", "题目框答案框评测详细统计信息", "任务名"]
+                    if target_file == "AI.xlsx":
+                        texts.append("阶段")
+                    elif target_file == "答题卡-AI.xlsx":
+                        texts.append("手写识别")
+
+                    remaining = remaining_ms()
+                    if remaining <= 0:
+                        return
+                    try:
+                        page.wait_for_function(
+                            "texts => texts.every(text => (document.body && document.body.innerText || '').includes(text))",
+                            arg=texts,
+                            timeout=min(20000, remaining),
+                        )
+                    except Exception:
+                        pass
+
+                for attempt in range(attempts):
+                    try:
+                        wait_for_detail_ready()
+                        remaining = remaining_ms()
+                        if remaining <= 0:
+                            break
+                        page.wait_for_timeout(min(500 + attempt * 250, remaining))
+                        btn = first_clickable_button(button_text)
+                        if btn is None:
+                            raise RuntimeError(f"未找到按钮：{button_text}")
+                        remaining = remaining_ms()
+                        if remaining <= 0:
+                            break
+                        with page.expect_download(timeout=min(per_attempt_timeout, remaining)) as d:
+                            btn.click(force=True, timeout=min(5000, max(1000, remaining)))
+                        if save_download(d.value, target_path, target_file):
+                            return True
+                    except Exception:
+                        remaining = remaining_ms()
+                        if remaining <= 0:
+                            break
+                        page.wait_for_timeout(min(1000, remaining))
+                return False
+
+            def open_ai_tab_if_present():
+                for tab_name in ("AI批改评测统计信息", "AI 批改业务维度统计信息"):
+                    try:
+                        tabs = page.get_by_role("tab", name=tab_name)
+                        if tabs.count() > 0 and tabs.first.is_visible(timeout=500):
+                            tabs.first.click(force=True, timeout=3000)
+                            page.wait_for_timeout(500)
+                            return
+                    except Exception:
+                        pass
 
             def process_link(url, is_card=False):
+                link_label = "答题卡" if is_card else "AI"
                 page.goto(url, wait_until="domcontentloaded", timeout=120000)
+                debug_timing(timing_start, f"{link_label} 页面打开")
                 try: page.wait_for_url(lambda u: "mapi.yuanfudao.com" in u, timeout=120000)
                 except: pass
                 page.bring_to_front()
+                open_ai_tab_if_present()
 
                 # AI.xlsx
                 ai_file = "答题卡-AI.xlsx" if is_card else "AI.xlsx"
-                try:
-                    btn = page.get_by_role("button", name="导出评测详情").first
-                    btn.wait_for(state="visible", timeout=10000)
-                    with page.expect_download(timeout=90000) as d: btn.click(force=True)
-                    ok = save_download(d.value, os.path.join(download_dir, ai_file))
-                    log_status(ai_file.replace('-', '_'), "✅" if ok else "❌", label_width)
-                except:
-                    log_status(ai_file.replace('-', '_'), "❌", label_width)
+                ok = download_by_button_text("导出评测详情", ai_file, total_timeout=60000, attempts=3)
+                debug_timing(timing_start, f"{ai_file} 下载")
+                log_status(ai_file.replace('-', '_'), "✅" if ok else "❌", label_width)
                 sys.stdout.flush()
 
                 # Score.xlsx
@@ -278,8 +448,9 @@ def auto_download_files(url1, url2, download_dir, label_width):
                     score_file = "答题卡-分数.xlsx" if is_card else "分数.xlsx"
                     btns = page.locator("button:has-text('导出Excel')")
                     if btns.count() >= 2:
-                        with page.expect_download(timeout=90000) as d2: btns.last.click(force=True)
-                        ok = save_download(d2.value, os.path.join(download_dir, score_file))
+                        with page.expect_download(timeout=180000) as d2: btns.last.click(force=True)
+                        ok = save_download(d2.value, os.path.join(download_dir, score_file), score_file)
+                        debug_timing(timing_start, f"{score_file} 下载")
                         log_status(score_file.replace('-', '_'), "✅" if ok else "❌", label_width)
                     else:
                         log_status(score_file.replace('-', '_'), "❌", label_width)
@@ -290,6 +461,7 @@ def auto_download_files(url1, url2, download_dir, label_width):
             if url1: process_link(url1, is_card=False)
             if url2: process_link(url2, is_card=True)
             browser_context.close()
+            focus_toolbox_app()
             print("")
             return True
     except Exception as e:
