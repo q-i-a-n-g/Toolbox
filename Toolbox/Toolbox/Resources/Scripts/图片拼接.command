@@ -110,6 +110,41 @@ collect_images_natural_sorted() {
   )
 }
 
+terminal_link_path() {
+  local path="$1"
+  local rest
+  if [[ "$path" == "$HOME/Downloads" || "$path" == "$HOME/Downloads/"* ]]; then
+    rest="${path#$HOME/Downloads}"
+    rest="${rest#/}"
+    if [ -n "$rest" ]; then
+      printf 'Download/%s' "$rest"
+    else
+      printf 'Download/'
+    fi
+    return
+  fi
+  if [[ "$path" == "$HOME/Desktop" || "$path" == "$HOME/Desktop/"* ]]; then
+    rest="${path#$HOME/Desktop}"
+    rest="${rest#/}"
+    if [ -n "$rest" ]; then
+      printf 'Desktop/%s' "$rest"
+    else
+      printf 'Desktop/'
+    fi
+    return
+  fi
+  if command -v /usr/bin/python3 >/dev/null 2>&1; then
+    /usr/bin/python3 - "$path" <<'PY'
+from pathlib import Path
+import sys
+
+print(Path(sys.argv[1]).expanduser().resolve().as_uri())
+PY
+  else
+    printf '%s' "$path"
+  fi
+}
+
 run_stack_group() {
   local mode="$1"
   local out_file="$2"
@@ -291,7 +326,7 @@ echo "已生成：${processed} 张图片"
 if (( failed > 0 )); then
   echo "拼接失败 ${failed} 组"
 fi
-echo "输出文件夹：$out_dir"
+echo "👉 输出文件夹：$(terminal_link_path "$out_dir")"
 if (( skipped > 0 )); then
   echo "提示：末尾不足 ${group_size} 张的 ${skipped} 张图片已跳过。"
 fi

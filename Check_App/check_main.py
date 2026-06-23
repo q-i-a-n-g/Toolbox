@@ -68,6 +68,23 @@ def debug_timing(start_time, label):
         sys.stdout.flush()
 
 
+def _start_focus_command(args, wait_seconds=0.08):
+    try:
+        proc = subprocess.Popen(
+            args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if wait_seconds <= 0:
+            return True
+        try:
+            return proc.wait(timeout=wait_seconds) == 0
+        except subprocess.TimeoutExpired:
+            return True
+    except Exception:
+        return False
+
+
 def focus_toolbox_app():
     app_path = os.environ.get("TOOLBOX_APP_PATH", "").strip()
     script = """
@@ -95,27 +112,25 @@ try
 end try
 end run
 """
-    for delay in (0, 0.2, 0.6):
-        if delay:
-            time.sleep(delay)
-        try:
-            if app_path and os.path.exists(app_path):
-                subprocess.run(
-                    ["/usr/bin/open", app_path],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=3,
-                    check=False,
-                )
-            subprocess.run(
-                ["/usr/bin/osascript", "-e", script, app_path],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=3,
-                check=False,
-            )
-        except Exception:
-            pass
+    requested = False
+    if app_path and os.path.exists(app_path):
+        requested = _start_focus_command(["/usr/bin/open", app_path]) or requested
+    requested = _start_focus_command(["/usr/bin/open", "-b", "local.liu.Toolbox"]) or requested
+    _start_focus_command(["/usr/bin/osascript", "-e", script, app_path], wait_seconds=0)
+    if requested:
+        return
+
+
+def close_browser_context_and_focus(browser_context, timing_start=None):
+    focus_toolbox_app()
+    if timing_start is not None:
+        debug_timing(timing_start, "已请求回到Toolbox")
+    try:
+        browser_context.close()
+    finally:
+        focus_toolbox_app()
+        if timing_start is not None:
+            debug_timing(timing_start, "浏览器关闭后再次请求Toolbox")
 
 # ── 工具函数 ─────────────────────────────────────────────────────────────
 def read_sheet(ws):
@@ -458,10 +473,11 @@ def auto_download_files(url1, url2, download_dir, label_width):
                     log_status(('答题卡-分数.xlsx' if is_card else '分数.xlsx').replace('-', '_'), "❌", label_width)
                 sys.stdout.flush()
 
-            if url1: process_link(url1, is_card=False)
-            if url2: process_link(url2, is_card=True)
-            browser_context.close()
-            focus_toolbox_app()
+            if url1:
+                process_link(url1, is_card=False)
+            if url2:
+                process_link(url2, is_card=True)
+            close_browser_context_and_focus(browser_context, timing_start)
             print("")
             return True
     except Exception as e:

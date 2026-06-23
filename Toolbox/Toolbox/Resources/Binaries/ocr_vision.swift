@@ -21,18 +21,39 @@ guard let tiff = img.tiffRepresentation,
     exit(1)
 }
 
-let req = VNRecognizeTextRequest()
-req.recognitionLevel = .accurate
-req.usesLanguageCorrection = false
-req.recognitionLanguages = ["zh-Hans", "en-US"]
+func recognizeLines(in image: CGImage) throws -> [String] {
+    let req = VNRecognizeTextRequest()
+    req.recognitionLevel = .accurate
+    req.usesLanguageCorrection = false
+    req.recognitionLanguages = ["zh-Hans", "en-US"]
 
-let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-do {
+    let handler = VNImageRequestHandler(cgImage: image, options: [:])
     try handler.perform([req])
-    let obs = (req.results as? [VNRecognizedTextObservation]) ?? []
-    for o in obs {
-        if let c = o.topCandidates(1).first {
-            print(c.string)
+    let obs = req.results ?? []
+    return obs.compactMap { $0.topCandidates(1).first?.string }
+}
+
+let maxSliceHeight = 600
+let sliceOverlap = 80
+do {
+    if cgImage.height <= maxSliceHeight {
+        for line in try recognizeLines(in: cgImage) {
+            print(line)
+        }
+    } else {
+        var y = 0
+        while y < cgImage.height {
+            let height = min(maxSliceHeight, cgImage.height - y)
+            let rect = CGRect(x: 0, y: y, width: cgImage.width, height: height)
+            if let slice = cgImage.cropping(to: rect) {
+                for line in try recognizeLines(in: slice) {
+                    print(line)
+                }
+            }
+            if y + height >= cgImage.height {
+                break
+            }
+            y += maxSliceHeight - sliceOverlap
         }
     }
 } catch {

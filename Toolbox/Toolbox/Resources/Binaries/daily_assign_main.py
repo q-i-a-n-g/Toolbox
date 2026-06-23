@@ -8,6 +8,7 @@ import json
 import subprocess
 import warnings
 import time
+import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -41,6 +42,20 @@ class TaskRow:
     subtask_id: str
     pages: float
     tags: float
+
+
+@dataclass(frozen=True)
+class CheckGroup:
+    sheet: str
+    key: str
+    subtask_id: str
+    row_indices: tuple[int, ...]
+    owners: tuple[str, ...]
+    pages: float
+    first_row_index: int
+
+
+CHECKERS = ["郭小雨", "符于娜", "李橙橙"]
 
 
 def split_files(raw: str) -> list[Path]:
@@ -163,6 +178,23 @@ def mock_download(ai_target: Path, card_target: Path) -> tuple[bool, bool]:
     return ok_ai, ok_card
 
 
+def _start_focus_command(args, wait_seconds=0.08):
+    try:
+        proc = subprocess.Popen(
+            args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if wait_seconds <= 0:
+            return True
+        try:
+            return proc.wait(timeout=wait_seconds) == 0
+        except subprocess.TimeoutExpired:
+            return True
+    except Exception:
+        return False
+
+
 def focus_toolbox_app():
     app_path = os.environ.get("TOOLBOX_APP_PATH", "").strip()
     script = """
@@ -190,27 +222,21 @@ try
 end try
 end run
 """
-    for delay in (0, 0.2, 0.6):
-        if delay:
-            time.sleep(delay)
-        try:
-            if app_path and os.path.exists(app_path):
-                subprocess.run(
-                    ["/usr/bin/open", app_path],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=3,
-                    check=False,
-                )
-            subprocess.run(
-                ["/usr/bin/osascript", "-e", script, app_path],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=3,
-                check=False,
-            )
-        except Exception:
-            pass
+    requested = False
+    if app_path and os.path.exists(app_path):
+        requested = _start_focus_command(["/usr/bin/open", app_path]) or requested
+    requested = _start_focus_command(["/usr/bin/open", "-b", "local.liu.Toolbox"]) or requested
+    _start_focus_command(["/usr/bin/osascript", "-e", script, app_path], wait_seconds=0)
+    if requested:
+        return
+
+
+def close_browser_context_and_focus(browser_context):
+    focus_toolbox_app()
+    try:
+        browser_context.close()
+    finally:
+        focus_toolbox_app()
 
 
 def normalize_task_text(text: str) -> str:
@@ -586,8 +612,7 @@ def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: s
                 "答题卡",
                 create_time_range=task_create_time_range(date.today()),
             )
-            browser_context.close()
-            focus_toolbox_app()
+            close_browser_context_and_focus(browser_context)
             return ok1, ok2
     except Exception as e:
         print(f"E002：自动下载过程异常 ({e})")
@@ -769,7 +794,18 @@ def run_vision_ocr(image_path: Path) -> str:
     script = Path(script_env) if script_env else Path(__file__).with_name("ocr_vision.swift")
     if not script.exists(): return ""
     try:
-        p = subprocess.run(["/usr/bin/swift", str(script), str(image_path)], capture_output=True, text=True, timeout=30)
+        env = os.environ.copy()
+        cache_dir = env.get("TOOLBOX_SWIFT_MODULE_CACHE", "/private/tmp/toolbox_swift_module_cache")
+        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+        env.setdefault("CLANG_MODULE_CACHE_PATH", cache_dir)
+        env.setdefault("SWIFT_MODULE_CACHE_PATH", cache_dir)
+        p = subprocess.run(
+            ["/usr/bin/swift", "-module-cache-path", cache_dir, str(script), str(image_path)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env,
+        )
         return p.stdout if p.returncode == 0 else ""
     except: return ""
 
@@ -1051,6 +1087,296 @@ def task_weight_sum(tasks: List[TaskRow], weight_key: str) -> float:
     return total
 
 
+def page_weight(task: TaskRow) -> float:
+    return task.pages if task.pages > 0 else 1.0
+
+
+def normalized_owner_name(owner: str) -> str:
+    return str(owner or "").replace("韩@“”正", "韩正").strip()
+
+
+def make_check_groups(sheet: str, rows) -> List[CheckGroup]:
+    grouped: Dict[str, Dict] = {}
+    for idx, (task, owner) in enumerate(rows):
+        subtask = str(task.subtask_id or "").strip()
+        key = subtask if subtask else f"__row_{idx}"
+        if key not in grouped:
+            grouped[key] = {
+                "subtask_id": subtask,
+                "row_indices": [],
+                "owners": set(),
+                "pages": 0.0,
+                "first_row_index": idx,
+            }
+        record = grouped[key]
+        record["row_indices"].append(idx)
+        owner_name = normalized_owner_name(owner)
+        if owner_name:
+            record["owners"].add(owner_name)
+        record["pages"] += page_weight(task)
+
+    groups: List[CheckGroup] = []
+    for key, record in grouped.items():
+        groups.append(CheckGroup(
+            sheet=sheet,
+            key=key,
+            subtask_id=record["subtask_id"],
+            row_indices=tuple(record["row_indices"]),
+            owners=tuple(sorted(record["owners"])),
+            pages=record["pages"],
+            first_row_index=record["first_row_index"],
+        ))
+    return sorted(groups, key=lambda g: g.first_row_index)
+
+
+def sheet_page_total(rows) -> float:
+    return sum(page_weight(task) for task, _ in rows)
+
+
+def random_source() -> random.Random:
+    seed = os.environ.get("DAILY_ASSIGN_CHECK_SEED", "").strip()
+    if seed:
+        return random.Random(seed)
+    return random.Random()
+
+
+def allocate_sheet_checks(
+    groups: List[CheckGroup],
+    rng: random.Random,
+    totals: Dict[str, float],
+) -> Dict[tuple[str, int], str]:
+    groups = sorted(groups, key=lambda g: g.first_row_index)
+    if not groups:
+        return {}
+
+    viable = [g for g in groups if any(checker not in g.owners for checker in CHECKERS)]
+    if not viable:
+        return {}
+
+    target_pages = max(1.0, sum(g.pages for g in groups) * 0.10)
+    base_totals = {name: totals.get(name, 0.0) for name in CHECKERS}
+
+    def balance_values(local_totals: Dict[str, float]) -> tuple[float, float]:
+        combined = [base_totals.get(name, 0.0) + local_totals.get(name, 0.0) for name in CHECKERS]
+        if not combined:
+            return 0.0, 0.0
+        avg = sum(combined) / len(combined)
+        return max(combined) - min(combined), sum((v - avg) ** 2 for v in combined)
+
+    def assign_selected_groups(selected: List[CheckGroup]) -> tuple[Dict[tuple[str, str], str], Dict[str, float]]:
+        group_assignments: Dict[tuple[str, str], str] = {}
+        local_totals = {name: 0.0 for name in CHECKERS}
+        selected = sorted(selected, key=lambda g: (g.pages, -g.first_row_index), reverse=True)
+
+        for group in selected:
+            options = [checker for checker in CHECKERS if checker not in group.owners]
+            if not options:
+                continue
+            checker = min(
+                options,
+                key=lambda name: (base_totals.get(name, 0.0) + local_totals.get(name, 0.0), name),
+            )
+            group_assignments[(group.sheet, group.key)] = checker
+            local_totals[checker] += group.pages
+
+        group_by_key = {(group.sheet, group.key): group for group in selected}
+
+        improved = True
+        while improved:
+            improved = False
+            current = balance_values(local_totals)
+            best_move = None
+            best_score = current
+
+            for key, checker in list(group_assignments.items()):
+                group = group_by_key.get(key)
+                if group is None:
+                    continue
+                for target_checker in CHECKERS:
+                    if target_checker == checker or target_checker in group.owners:
+                        continue
+                    trial = dict(local_totals)
+                    trial[checker] -= group.pages
+                    trial[target_checker] += group.pages
+                    score = balance_values(trial)
+                    if score < best_score:
+                        best_score = score
+                        best_move = ("move", key, checker, target_checker, group.pages)
+
+            keys = list(group_assignments.keys())
+            for i, left_key in enumerate(keys):
+                left_group = group_by_key.get(left_key)
+                left_checker = group_assignments.get(left_key)
+                if left_group is None or left_checker is None:
+                    continue
+                for right_key in keys[i + 1:]:
+                    right_group = group_by_key.get(right_key)
+                    right_checker = group_assignments.get(right_key)
+                    if right_group is None or right_checker is None or left_checker == right_checker:
+                        continue
+                    if right_checker in left_group.owners or left_checker in right_group.owners:
+                        continue
+                    trial = dict(local_totals)
+                    trial[left_checker] += right_group.pages - left_group.pages
+                    trial[right_checker] += left_group.pages - right_group.pages
+                    score = balance_values(trial)
+                    if score < best_score:
+                        best_score = score
+                        best_move = ("swap", left_key, right_key, left_checker, right_checker)
+
+            if best_move is None:
+                break
+            if best_move[0] == "move":
+                _, key, old_checker, new_checker, pages = best_move
+                group_assignments[key] = new_checker
+                local_totals[old_checker] -= pages
+                local_totals[new_checker] += pages
+            else:
+                _, left_key, right_key, left_checker, right_checker = best_move
+                left_group = group_by_key[left_key]
+                right_group = group_by_key[right_key]
+                group_assignments[left_key] = right_checker
+                group_assignments[right_key] = left_checker
+                local_totals[left_checker] += right_group.pages - left_group.pages
+                local_totals[right_checker] += left_group.pages - right_group.pages
+            improved = True
+
+        return group_assignments, local_totals
+
+    def build_sample(pool: List[CheckGroup]) -> List[CheckGroup]:
+        selected: List[CheckGroup] = []
+        pages = 0.0
+        for group in pool:
+            if not selected or pages < target_pages:
+                selected.append(group)
+                pages += group.pages
+            if pages >= target_pages:
+                break
+        return selected
+
+    trials = min(1200, max(240, len(viable) * 10))
+    trial_pools = [
+        sorted(viable, key=lambda g: g.first_row_index),
+        sorted(viable, key=lambda g: g.pages, reverse=True),
+    ]
+    for _ in range(trials):
+        pool = viable[:]
+        rng.shuffle(pool)
+        trial_pools.append(pool)
+
+    best_assignments: Dict[tuple[str, str], str] = {}
+    best_totals = {name: 0.0 for name in CHECKERS}
+    best_key = (float("inf"), float("inf"), float("inf"), float("inf"), float("inf"))
+
+    for pool in trial_pools:
+        selected = build_sample(pool)
+        group_assignments, local_totals = assign_selected_groups(selected)
+        assigned_pages = sum(local_totals.values())
+        if assigned_pages <= 0:
+            continue
+        balance_range, balance_squares = balance_values(local_totals)
+        target_diff = abs(assigned_pages - target_pages)
+        under_target = max(0.0, target_pages - assigned_pages)
+        key = (target_diff, under_target, balance_range, balance_squares, len(group_assignments))
+        if key < best_key:
+            best_key = key
+            best_assignments = group_assignments
+            best_totals = local_totals
+
+    group_by_key = {(group.sheet, group.key): group for group in groups}
+    assignments: Dict[tuple[str, int], str] = {}
+    for key, checker in best_assignments.items():
+        group = group_by_key.get(key)
+        if group is None:
+            continue
+        for row_index in group.row_indices:
+            assignments[(group.sheet, row_index)] = checker
+
+    for name, pages in best_totals.items():
+        totals[name] = totals.get(name, 0.0) + pages
+
+    return assignments
+
+
+def plan_checker_assignments(ai_rows, card_rows, mode: str) -> tuple[Dict[tuple[str, int], str], Dict[str, float], Dict[str, float]]:
+    rng = random_source()
+    all_assignments: Dict[tuple[str, int], str] = {}
+    totals = {name: 0.0 for name in CHECKERS}
+
+    ai_groups = make_check_groups("AI", ai_rows)
+    card_groups = make_check_groups("答题卡", card_rows)
+    sheet_totals = {
+        "AI": sheet_page_total(ai_rows),
+        "答题卡": sheet_page_total(card_rows),
+    }
+
+    if mode == "linked":
+        all_assignments.update(allocate_sheet_checks(ai_groups, rng, totals))
+        all_assignments.update(allocate_sheet_checks(card_groups, rng, totals))
+    else:
+        for groups in (ai_groups, card_groups):
+            sheet_checker_totals = {name: 0.0 for name in CHECKERS}
+            all_assignments.update(allocate_sheet_checks(groups, rng, sheet_checker_totals))
+            for name, pages in sheet_checker_totals.items():
+                totals[name] += pages
+
+    return all_assignments, sheet_totals, totals
+
+
+def fmt_pages(value: float) -> str:
+    if abs(value - round(value)) < 0.001:
+        return str(int(round(value)))
+    return f"{value:.1f}".rstrip("0").rstrip(".")
+
+
+def display_file_link(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    try:
+        home = Path.home()
+        resolved = path.expanduser()
+        downloads = home / "Downloads"
+        desktop = home / "Desktop"
+        if resolved.parent == downloads:
+            return f"Download/{resolved.name}"
+        if resolved.parent == desktop:
+            return f"Desktop/{resolved.name}"
+        return str(resolved.relative_to(home))
+    except Exception:
+        return str(path)
+
+
+def print_assignment_ratio_summary(signup: Dict[str, int], signup_order: List[str], rows, method: str) -> None:
+    print("[分配] 实际分配数量、比例：")
+    total_signup_all = sum(signup.values())
+    assigned_w: Dict[str, float] = {}
+    for task, owner in rows:
+        w = task.pages if method == "page" else task.tags
+        assigned_w[owner] = assigned_w.get(owner, 0.0) + (w if w > 0 else 1.0)
+    total_weight_all = sum(assigned_w.values())
+
+    display_order = []
+    seen = set()
+    for name in signup_order:
+        if name in signup and name not in seen:
+            display_order.append(name)
+            seen.add(name)
+    for name in signup:
+        if name not in seen:
+            display_order.append(name)
+            seen.add(name)
+
+    for name in display_order:
+        signup_n = signup.get(name, 0)
+        if signup_n == 0:
+            continue
+        signup_ratio = signup_n / max(total_signup_all, 1) * 100.0
+        assigned = assigned_w.get(name, 0.0)
+        assigned_ratio = assigned / max(total_weight_all, 1.0) * 100.0
+        warn = " ⚠️" if assigned <= 0 else ""
+        print(f"- {name}: 报名 {signup_n}/{signup_ratio:.1f}% | 分配 {fmt_pages(assigned)}/{assigned_ratio:.1f}%{warn}")
+
+
 def split_signup_for_linked_mode(ai_tasks: List[TaskRow], card_tasks: List[TaskRow], signup: Dict[str, int], weight_key: str, name_order: List[str] | None = None) -> tuple[Dict[str, int], Dict[str, int]]:
     names = ordered_signup_names(signup, name_order)
     if len(names) <= 1 or not ai_tasks or not card_tasks:
@@ -1118,16 +1444,19 @@ def period_text(today: date) -> str:
     return f"{start.month:02d}{start.day:02d}-{end.month:02d}{end.day:02d}"
 
 
-def write_sheet(ws, source_headers: List[str], rows, today: date):
+def write_sheet(ws, source_headers: List[str], rows, today: date, checker_assignments: Dict[tuple[str, int], str] | None = None):
     headers = ["周期"] + source_headers + ["负责人", "交付日期", "完成情况", "特殊备注", "检查人", "问责", "是否已修改", "报名截图"]
     ws.append(headers)
     yellow = PatternFill(fill_type="solid", fgColor="FFF4B084")
     for c in "EJK": ws[f"{c}1"].fill = yellow
     ws.auto_filter.ref = f"A1:{chr(64+len(headers))}1"
     period, delivery = period_text(today), delivery_text(today)
-    for task, owner in rows:
+    sheet_name = ws.title
+    checker_assignments = checker_assignments or {}
+    for row_index, (task, owner) in enumerate(rows):
         excel_owner = owner.replace("韩@“”正", "韩正")
-        ws.append([period] + task.cols + [excel_owner, delivery, "", "", "", "", "", ""])
+        checker = checker_assignments.get((sheet_name, row_index), "")
+        ws.append([period] + task.cols + [excel_owner, delivery, "", "", checker, "", "", ""])
 
 
 def main() -> int:
@@ -1135,6 +1464,7 @@ def main() -> int:
     except: pass
     files = split_files(os.environ.get("DAILY_ASSIGN_FILES", ""))
     shots, ai, card = classify(files)
+    uploaded_source_files = ai is not None or card is not None
     if not shots:
         print("E001：未检测到 有效 报名截图"); return 1
 
@@ -1183,10 +1513,10 @@ def main() -> int:
         ai = ai_path if ok_ai else None
         card = card_path if ok_card else None
     
-    print("\n[分配] 开始分配...")
-    print("------------------------------")
+    method, mode = os.environ.get("DAILY_ASSIGN_METHOD", "page"), os.environ.get("DAILY_ASSIGN_MODE", "independent")
+    mode_title = "AI+答题卡" if mode == "linked" else "AI、答题卡"
+    print(f"\n[分配] 开始分配 [{mode_title}] ...")
 
-    method, mode = os.environ.get("DAILY_ASSIGN_METHOD", "page"), os.environ.get("DAILY_ASSIGN_MODE", "linked")
     ai_cap, card_cap = int(os.environ.get("DAILY_ASSIGN_AI_MAX", "200")), int(os.environ.get("DAILY_ASSIGN_CARD_MAX", "300"))
     ai_headers = ["任务名称", "子任务顺序", "任务ID", "子任务ID", "线上学生作业ID", "老师作业ID", "题单ID", "未测评页数", "总页数", "总评测数量", "任务链接"]
     card_headers = ai_headers[:]
@@ -1204,38 +1534,31 @@ def main() -> int:
     else:
         if ai_tasks: ai_rows, _ = assign(ai_tasks, signup, method, name_order=signup_order)
         if card_tasks: card_rows, _ = assign(card_tasks, signup, method, name_order=signup_order)
+    checker_assignments, sheet_page_totals, checker_totals = plan_checker_assignments(ai_rows, card_rows, mode)
     output_dir = Path(os.environ.get("OUTPUT_DIR", str(Path.cwd())))
     output, tmp = output_dir / "分配表.xlsx", (output_dir / "分配表.xlsx").with_suffix(".tmp.xlsx")
     try:
         wb = Workbook(); wb.remove(wb.active)
-        if ai_rows: write_sheet(wb.create_sheet("AI"), ai_headers, ai_rows, date.today())
-        if card_rows: write_sheet(wb.create_sheet("答题卡"), card_headers, card_rows, date.today())
+        if ai_rows: write_sheet(wb.create_sheet("AI"), ai_headers, ai_rows, date.today(), checker_assignments)
+        if card_rows: write_sheet(wb.create_sheet("答题卡"), card_headers, card_rows, date.today(), checker_assignments)
         wb.save(tmp); os.replace(tmp, output)
     except Exception as e:
         print(f"E005：写出 分配表 失败 ({e})"); return 1
-    print("[分配] 实际分配数量、比例：")
-    total_signup_all = sum(signup.values())
-    assigned_w = {}
-    for t, owner in ai_rows + card_rows:
-        w = t.pages if method == "page" else t.tags
-        assigned_w[owner] = assigned_w.get(owner, 0) + w
-    total_weight_all = sum(assigned_w.values())
-    display_order = list(signup_order) if signup_order else []
-    for n in signup:
-        if n not in display_order:
-            display_order.append(n)
-    for n in display_order:
-        signup_n = signup.get(n, 0)
-        if signup_n == 0: continue
-        signup_ratio = (signup_n / max(total_signup_all, 1) * 100.0)
-        assign_w_n = assigned_w.get(n, 0)
-        assign_ratio = (assign_w_n / max(total_weight_all, 1) * 100.0)
-        warn = " ⚠️" if assign_w_n == 0 else ""
-        print(f"- {n}: 报名 {signup_n}/{signup_ratio:.1f}% | 分配 {assign_w_n:g}/{assign_ratio:.1f}%{warn}")
+    print_assignment_ratio_summary(signup, signup_order, ai_rows + card_rows, method)
     for bad in sorted(set(unmatched)): print(f"- {bad}: 报名 无法匹配 ⚠️")
-    try: display_path = str(output.relative_to(Path.home()))
-    except Exception: display_path = f"{output_dir.name}/{output.name}"
-    print(f"\n------------------------------\n👉 已生成：{display_path}\n")
+    generated_path = display_file_link(output) or f"{output_dir.name}/{output.name}"
+    downloaded = [display_file_link(ai), display_file_link(card)]
+    downloaded = [p for p in downloaded if p]
+    downloaded_line = " , ".join(downloaded)
+    source_line_label = "源文件" if uploaded_source_files else "已下载"
+    checker_line = "，".join(f"{name} {fmt_pages(checker_totals.get(name, 0.0))} 页" for name in CHECKERS)
+    print("\n------------------------------")
+    print(f"[检查] AI共 {fmt_pages(sheet_page_totals.get('AI', 0.0))} 页， 答题卡共 {fmt_pages(sheet_page_totals.get('答题卡', 0.0))} 页")
+    print(f"[分配] {checker_line}")
+    print("------------------------------")
+    if downloaded_line:
+        print(f"👉 {source_line_label}：{downloaded_line}\n")
+    print(f"👉 已生成：{generated_path}\n")
     print("👉 任务已完成")
     return 0
 

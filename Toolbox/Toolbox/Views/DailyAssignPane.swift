@@ -6,7 +6,7 @@ struct DailyAssignSettings {
     var allocationMethod: String = "page"
     var aiMaxPages: Int = 200
     var cardMaxPages: Int = 300
-    var allocationMode: String = "linked"
+    var allocationMode: String = "independent"
 }
 
 struct DailyAssignPane: View {
