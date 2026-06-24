@@ -763,7 +763,7 @@ def normalize_name(raw: str, names: List[str]) -> str | None:
     if raw in names: return raw
     
     # 2. Hardcode common OCR misreadings
-    ocr_map = {"符手娜": "符于娜", "刘兩菲": "刘雨菲", "阎思宇": "阎思宇"}
+    ocr_map = {"符手娜": "符于娜", "刘兩菲": "刘雨菲", "阎思宇": "阎思宇", "杢梦尻": "李梦园"}
     if raw in ocr_map:
         mapped = ocr_map[raw]
         if mapped in names: return mapped
@@ -798,24 +798,26 @@ def run_vision_ocr(image_path: Path) -> str:
     script = Path(script_env) if script_env else Path(__file__).with_name("ocr_vision.swift")
     try:
         env = os.environ.copy()
+        commands = []
         if ocr_bin.exists() and os.access(ocr_bin, os.X_OK):
-            cmd = [str(ocr_bin), str(image_path)]
-        elif script.exists():
+            commands.append([str(ocr_bin), str(image_path)])
+        if script.exists():
             cache_dir = env.get("TOOLBOX_SWIFT_MODULE_CACHE", "/private/tmp/toolbox_swift_module_cache")
             Path(cache_dir).mkdir(parents=True, exist_ok=True)
             env.setdefault("CLANG_MODULE_CACHE_PATH", cache_dir)
             env.setdefault("SWIFT_MODULE_CACHE_PATH", cache_dir)
-            cmd = ["/usr/bin/swift", "-module-cache-path", cache_dir, str(script), str(image_path)]
-        else:
-            return ""
-        p = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env=env,
-        )
-        return p.stdout if p.returncode == 0 else ""
+            commands.append(["/usr/bin/swift", "-module-cache-path", cache_dir, str(script), str(image_path)])
+        for cmd in commands:
+            p = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=env,
+            )
+            if p.returncode == 0 and p.stdout.strip():
+                return p.stdout
+        return ""
     except: return ""
 
 
@@ -870,6 +872,10 @@ def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[s
             unmatched.remove(name)
             unmatched_pos.pop(name, None)
 
+    def is_recall_context(text: str, start: int, end: int) -> bool:
+        after = text[end:min(len(text), end + 12)]
+        return "撤回" in after and "消息" in after
+
     def parse_count_near(text: str, start: int, end: int) -> int | None:
         left = max(0, start - 8)
         right = min(len(text), end + 12)
@@ -899,6 +905,8 @@ def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[s
                 if not pattern:
                     continue
                 for m in re.finditer(re.escape(pattern), compact):
+                    if is_recall_context(compact, m.start(), m.end()):
+                        continue
                     cnt = parse_count_near(compact, m.start(), m.end())
                     if cnt:
                         remember(name, cnt, shot_offset + m.start())
@@ -908,6 +916,8 @@ def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[s
 
         for match in re.finditer(r"([\u4e00-\u9fa5@\u201c\u201d\u2018\u2019\u0022\u0027\s]{2,12})[^\d\u4e00-\u9fa5]{0,10}(\d+)", text):
             raw_name, cnt_s = match.group(1), match.group(2)
+            if is_recall_context(text, match.start(1), match.end(1)):
+                continue
             norm = normalize_name(raw_name, names)
             if not norm:
                 pure = "".join(re.findall(r"[\u4e00-\u9fa5]", raw_name))

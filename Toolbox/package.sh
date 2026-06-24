@@ -18,6 +18,7 @@ else
 fi
 
 mkdir -p build
+DERIVED_DATA_DIR="$(pwd)/build/DerivedData"
 rm -rf build/arm64 build/x86_64 build/Debug build/Release
 rm -f build/Toolbox_AppleSilicon.zip build/Toolbox_Intel.zip
 rm -f Toolbox_AppleSilicon.zip Toolbox_Intel.zip
@@ -26,7 +27,11 @@ find Toolbox/Resources -name __pycache__ -type d -prune -exec rm -rf {} +
 OCR_SWIFT="Toolbox/Resources/Binaries/ocr_vision.swift"
 OCR_BIN="Toolbox/Resources/Binaries/ocr_vision_bin"
 if [ -f "$OCR_SWIFT" ]; then
-    xcrun swiftc -O "$OCR_SWIFT" -o "$OCR_BIN"
+    SWIFT_MODULE_CACHE="${TMPDIR:-/tmp}/toolbox_swift_module_cache"
+    mkdir -p "$SWIFT_MODULE_CACHE"
+    CLANG_MODULE_CACHE_PATH="$SWIFT_MODULE_CACHE" SWIFT_MODULE_CACHE_PATH="$SWIFT_MODULE_CACHE" \
+        xcrun swiftc -O -module-cache-path "$SWIFT_MODULE_CACHE" \
+        -target "${BUILD_ARCH}-apple-macos12.3" "$OCR_SWIFT" -o "$OCR_BIN"
     chmod +x "$OCR_BIN"
 fi
 
@@ -54,6 +59,7 @@ thin_check_pkg() {
 echo "Building for $BUILD_LABEL ($BUILD_ARCH)..."
 xcodebuild -project Toolbox.xcodeproj -scheme "$SCHEME" -configuration Release \
     ARCHS="$BUILD_ARCH" ONLY_ACTIVE_ARCH=NO \
+    -derivedDataPath "$DERIVED_DATA_DIR" \
     CONFIGURATION_BUILD_DIR="$(pwd)/$BUILD_DIR" \
     CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=YES > /dev/null
 
@@ -68,7 +74,7 @@ strip -x "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ocr_vision_bin" 2>/
 thin_check_pkg "$BUILD_ARCH" "$BUILD_DIR/Toolbox.app"
 APP_ICONSET_SRC="Toolbox/Resources/Assets.xcassets/AppIcon.appiconset"
 APP_ICON_OUT="$BUILD_DIR/Toolbox.app/Contents/Resources/AppIcon.icns"
-if [ -d "$APP_ICONSET_SRC" ]; then
+if [ -d "$APP_ICONSET_SRC" ] && [ ! -s "$APP_ICON_OUT" ]; then
     TMP_ICON_ROOT="$(mktemp -d)"
     TMP_ICONSET="$TMP_ICON_ROOT/AppIcon.iconset"
     mkdir -p "$TMP_ICONSET"
