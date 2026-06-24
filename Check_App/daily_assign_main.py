@@ -844,8 +844,6 @@ def load_signup_texts(shots: List[Path]) -> List[str]:
             except Exception:
                 texts[idx] = ""
             done += 1
-            if len(missing) > 1:
-                print(f"[识别] OCR进度 {done}/{len(missing)}", flush=True)
     return texts
 
 
