@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import QuartzCore
 
 @main
 struct ToolboxApp: App {
@@ -51,6 +52,8 @@ private struct WindowConfigurator: NSViewRepresentable {
         private var monitor: Any?
         private weak var window: NSWindow?
         private weak var sidebarButton: NSButton?
+        private var frameBeforeTopZoom: NSRect?
+        private var isAnimatingTopZoom = false
 
         init(viewModel: RootViewModel) {
             self.viewModel = viewModel
@@ -65,14 +68,46 @@ private struct WindowConfigurator: NSViewRepresentable {
         func installDoubleClickZoomHandler(for window: NSWindow) {
             guard !didInstall else { return }
             didInstall = true
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak window] event in
-                guard event.clickCount == 2, let window else { return event }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self, weak window] event in
+                guard let self, event.clickCount == 2, let window, event.window == window else { return event }
                 let location = window.mouseLocationOutsideOfEventStream
                 if location.y >= window.frame.height - 48 {
-                    window.performZoom(nil)
+                    self.toggleTopZoom(for: window)
+                    return nil
                 }
                 return event
             }
+        }
+
+        private func toggleTopZoom(for window: NSWindow) {
+            guard !isAnimatingTopZoom else { return }
+            let screenFrame = (window.screen ?? NSScreen.main)?.visibleFrame
+            guard let screenFrame else { return }
+
+            let targetFrame: NSRect
+            if let oldFrame = frameBeforeTopZoom, isFrameNear(window.frame, screenFrame) {
+                targetFrame = oldFrame
+                frameBeforeTopZoom = nil
+            } else {
+                frameBeforeTopZoom = window.frame
+                targetFrame = screenFrame
+            }
+
+            isAnimatingTopZoom = true
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.24
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(targetFrame, display: true)
+            } completionHandler: { [weak self] in
+                self?.isAnimatingTopZoom = false
+            }
+        }
+
+        private func isFrameNear(_ lhs: NSRect, _ rhs: NSRect) -> Bool {
+            abs(lhs.origin.x - rhs.origin.x) < 2 &&
+            abs(lhs.origin.y - rhs.origin.y) < 2 &&
+            abs(lhs.size.width - rhs.size.width) < 2 &&
+            abs(lhs.size.height - rhs.size.height) < 2
         }
 
         func installSidebarButton(for window: NSWindow) {

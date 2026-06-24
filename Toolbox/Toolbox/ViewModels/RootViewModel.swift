@@ -128,10 +128,12 @@ final class RootViewModel: ObservableObject {
         tools.filter { !hiddenToolIDs.contains($0.id) }
     }
 
-
-
     var shouldShowTextPane: Bool {
         editorMode != .hidden
+    }
+
+    var defaultDailyAssignNames: [String] {
+        canonicalDailyAssignNames
     }
 
     var dailyAssignCanConfirm: Bool {
@@ -395,6 +397,10 @@ final class RootViewModel: ObservableObject {
         }
     }
 
+    func restoreDefaultDailyAssignConfigNames() {
+        dailyAssignConfigNames = canonicalDailyAssignNames
+    }
+
     private var runSessionID = UUID()
 
     func startSelectedTool() {
@@ -482,17 +488,7 @@ final class RootViewModel: ObservableObject {
             extraEnv["TOOLBOX_APP_PATH"] = Bundle.main.bundleURL.path
             extraEnv["DOWNLOAD_DIR"] = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?.path ?? ""
             extraEnv["OUTPUT_DIR"] = Bundle.main.bundleURL.deletingLastPathComponent().path
-            if let ocrScript = Bundle.main.resourceURL?
-                .appendingPathComponent("Binaries", isDirectory: true)
-                .appendingPathComponent("ocr_vision.swift") {
-                extraEnv["OCR_VISION_SCRIPT"] = ocrScript.path
-            }
-            if let assignBin = Bundle.main.resourceURL?
-                .appendingPathComponent("Binaries", isDirectory: true)
-                .appendingPathComponent("check_main_pkg", isDirectory: true)
-                .appendingPathComponent("daily_assign_main_bin") {
-                extraEnv["DAILY_ASSIGN_BIN"] = assignBin.path
-            }
+            addDailyAssignRuntimePaths(to: &extraEnv)
             inputText = ""
         } else if selectedTool.id == "stitch-images" {
             guard let folderURL = stitchImagesState.folderURL else {
@@ -533,7 +529,7 @@ final class RootViewModel: ObservableObject {
                     }
                 }
             },
-            onExit: { [weak self] status in
+            onExit: { [weak self] _ in
                 guard let self = self else { return }
                 Task { @MainActor in
                     let isCurrentRun = self.isRunning && self.runSessionID == currentSessionID
@@ -985,17 +981,7 @@ final class RootViewModel: ObservableObject {
             "DAILY_ASSIGN_FILES": filesPath,
             "DAILY_ASSIGN_PREVIEW_ONLY": "1"
         ]
-        if let ocrScript = Bundle.main.resourceURL?
-            .appendingPathComponent("Binaries", isDirectory: true)
-            .appendingPathComponent("ocr_vision.swift") {
-            extraEnv["OCR_VISION_SCRIPT"] = ocrScript.path
-        }
-        if let assignBin = Bundle.main.resourceURL?
-            .appendingPathComponent("Binaries", isDirectory: true)
-            .appendingPathComponent("check_main_pkg", isDirectory: true)
-            .appendingPathComponent("daily_assign_main_bin") {
-            extraEnv["DAILY_ASSIGN_BIN"] = assignBin.path
-        }
+        addDailyAssignRuntimePaths(to: &extraEnv)
 
         terminalService.start(
             tool: selectedTool,
@@ -1062,6 +1048,29 @@ final class RootViewModel: ObservableObject {
             }
         }
         return kept.joined(separator: "\n")
+    }
+
+    private func addDailyAssignRuntimePaths(to extraEnv: inout [String: String]) {
+        guard let binariesURL = Bundle.main.resourceURL?
+            .appendingPathComponent("Binaries", isDirectory: true)
+        else { return }
+
+        let ocrBin = binariesURL.appendingPathComponent("ocr_vision_bin")
+        if FileManager.default.isExecutableFile(atPath: ocrBin.path) {
+            extraEnv["OCR_VISION_BIN"] = ocrBin.path
+        }
+
+        let ocrScript = binariesURL.appendingPathComponent("ocr_vision.swift")
+        if FileManager.default.fileExists(atPath: ocrScript.path) {
+            extraEnv["OCR_VISION_SCRIPT"] = ocrScript.path
+        }
+
+        let assignBin = binariesURL
+            .appendingPathComponent("check_main_pkg", isDirectory: true)
+            .appendingPathComponent("daily_assign_main_bin")
+        if FileManager.default.isExecutableFile(atPath: assignBin.path) {
+            extraEnv["DAILY_ASSIGN_BIN"] = assignBin.path
+        }
     }
 
     private func loadDailyAssignNames() -> [String] {

@@ -224,7 +224,10 @@ struct ContentView: View {
                     onConfig: viewModel.handleConfigButton
                 )
             } else if viewModel.editorMode == .config && viewModel.selectedTool.id == "daily-assign" {
-                DailyAssignConfigPane(names: $viewModel.dailyAssignConfigNames)
+                DailyAssignConfigPane(
+                    names: $viewModel.dailyAssignConfigNames,
+                    onRestoreDefaults: viewModel.restoreDefaultDailyAssignConfigNames
+                )
             } else if viewModel.editorMode == .help && (viewModel.selectedTool.id == "open-links" || viewModel.selectedTool.id == "download-images") {
                 CopyableHelpPane(
                     title: viewModel.editorTitle,

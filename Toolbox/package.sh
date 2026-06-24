@@ -23,6 +23,13 @@ rm -f build/Toolbox_AppleSilicon.zip build/Toolbox_Intel.zip
 rm -f Toolbox_AppleSilicon.zip Toolbox_Intel.zip
 find Toolbox/Resources -name __pycache__ -type d -prune -exec rm -rf {} +
 
+OCR_SWIFT="Toolbox/Resources/Binaries/ocr_vision.swift"
+OCR_BIN="Toolbox/Resources/Binaries/ocr_vision_bin"
+if [ -f "$OCR_SWIFT" ]; then
+    xcrun swiftc -O "$OCR_SWIFT" -o "$OCR_BIN"
+    chmod +x "$OCR_BIN"
+fi
+
 thin_binary_if_possible() {
     local arch="$1"
     local path="$2"
@@ -57,6 +64,7 @@ rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip"
 find "$BUILD_DIR/Toolbox.app" -name __pycache__ -type d -prune -exec rm -rf {} +
 # Strip symbols
 strip -x "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg" 2>/dev/null || true
+strip -x "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ocr_vision_bin" 2>/dev/null || true
 thin_check_pkg "$BUILD_ARCH" "$BUILD_DIR/Toolbox.app"
 APP_ICONSET_SRC="Toolbox/Resources/Assets.xcassets/AppIcon.appiconset"
 APP_ICON_OUT="$BUILD_DIR/Toolbox.app/Contents/Resources/AppIcon.icns"

@@ -269,6 +269,7 @@ struct CopyableHelpPane: View {
 
 struct DailyAssignConfigPane: View {
     @Binding var names: [String]
+    let onRestoreDefaults: () -> Void
     @State private var newName = ""
 
     var body: some View {
@@ -286,6 +287,10 @@ struct DailyAssignConfigPane: View {
                         .foregroundColor(.secondary)
 
                     Spacer()
+
+                    Button("恢复默认", action: onRestoreDefaults)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                 }
 
                 Text("注意：名单中没有的，不会给他分配任务。")

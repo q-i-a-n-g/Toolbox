@@ -792,17 +792,24 @@ def normalize_name(raw: str, names: List[str]) -> str | None:
 
 
 def run_vision_ocr(image_path: Path) -> str:
+    bin_env = os.environ.get("OCR_VISION_BIN", "").strip()
     script_env = os.environ.get("OCR_VISION_SCRIPT", "").strip()
+    ocr_bin = Path(bin_env) if bin_env else Path(__file__).with_name("ocr_vision_bin")
     script = Path(script_env) if script_env else Path(__file__).with_name("ocr_vision.swift")
-    if not script.exists(): return ""
     try:
         env = os.environ.copy()
-        cache_dir = env.get("TOOLBOX_SWIFT_MODULE_CACHE", "/private/tmp/toolbox_swift_module_cache")
-        Path(cache_dir).mkdir(parents=True, exist_ok=True)
-        env.setdefault("CLANG_MODULE_CACHE_PATH", cache_dir)
-        env.setdefault("SWIFT_MODULE_CACHE_PATH", cache_dir)
+        if ocr_bin.exists() and os.access(ocr_bin, os.X_OK):
+            cmd = [str(ocr_bin), str(image_path)]
+        elif script.exists():
+            cache_dir = env.get("TOOLBOX_SWIFT_MODULE_CACHE", "/private/tmp/toolbox_swift_module_cache")
+            Path(cache_dir).mkdir(parents=True, exist_ok=True)
+            env.setdefault("CLANG_MODULE_CACHE_PATH", cache_dir)
+            env.setdefault("SWIFT_MODULE_CACHE_PATH", cache_dir)
+            cmd = ["/usr/bin/swift", "-module-cache-path", cache_dir, str(script), str(image_path)]
+        else:
+            return ""
         p = subprocess.run(
-            ["/usr/bin/swift", "-module-cache-path", cache_dir, str(script), str(image_path)],
+            cmd,
             capture_output=True,
             text=True,
             timeout=30,
