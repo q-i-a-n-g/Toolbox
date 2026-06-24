@@ -195,14 +195,20 @@ struct TerminalTextView: NSViewRepresentable {
         let nsText = text as NSString
         var links: [(range: NSRange, label: String, url: URL)] = []
         let patterns: [(String, Int)] = [
-            (#"(^|[\s：:,，])((?:Download|Downloads|Desktop)(?:/[^\s,，]*)?)"#, 2),
+            (#"(^|[\s：:,，])((?:(?:Download|Downloads|Desktop)(?:/[^\n,，]*)?)|(?:doc/[^\n,，]+))"#, 2),
             (#"(file://[^\s,，]+)"#, 1)
         ]
         for (pattern, captureIndex) in patterns {
             guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
             for match in regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)) {
-                let linkRange = match.range(at: captureIndex)
-                guard linkRange.location != NSNotFound, linkRange.length > 0 else { continue }
+                let rawRange = match.range(at: captureIndex)
+                guard rawRange.location != NSNotFound, rawRange.length > 0 else { continue }
+                let rawLabel = nsText.substring(with: rawRange)
+                let leadingWhitespace = rawLabel.prefix { $0.isWhitespace }.count
+                let trailingWhitespace = rawLabel.reversed().prefix { $0.isWhitespace }.count
+                let length = rawRange.length - leadingWhitespace - trailingWhitespace
+                guard length > 0 else { continue }
+                let linkRange = NSRange(location: rawRange.location + leadingWhitespace, length: length)
                 let label = nsText.substring(with: linkRange)
                 if let url = fileURL(forTerminalPath: label) {
                     links.append((linkRange, label, url))
@@ -292,6 +298,10 @@ struct TerminalTextView: NSViewRepresentable {
         if label.hasPrefix("Desktop/") {
             let rest = String(label.dropFirst("Desktop/".count))
             return home.appendingPathComponent("Desktop").appendingPathComponent(rest)
+        }
+        if label.hasPrefix("doc/") {
+            let rest = String(label.dropFirst("doc/".count))
+            return home.appendingPathComponent("Desktop").appendingPathComponent("doc").appendingPathComponent(rest)
         }
         return nil
     }

@@ -21,7 +21,12 @@ guard let tiff = img.tiffRepresentation,
     exit(1)
 }
 
-func recognizeLines(in image: CGImage) throws -> [String] {
+struct RecognizedLine {
+    let text: String
+    let box: CGRect
+}
+
+func recognizeLines(in image: CGImage) throws -> [RecognizedLine] {
     let req = VNRecognizeTextRequest()
     req.recognitionLevel = .accurate
     req.usesLanguageCorrection = false
@@ -30,31 +35,34 @@ func recognizeLines(in image: CGImage) throws -> [String] {
     let handler = VNImageRequestHandler(cgImage: image, options: [:])
     try handler.perform([req])
     let obs = req.results ?? []
-    return obs.compactMap { $0.topCandidates(1).first?.string }
+    return obs.compactMap { observation in
+        guard let text = observation.topCandidates(1).first?.string.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else {
+            return nil
+        }
+        return RecognizedLine(text: text, box: observation.boundingBox)
+    }
 }
 
-let maxSliceHeight = 600
-let sliceOverlap = 80
 do {
-    if cgImage.height <= maxSliceHeight {
-        for line in try recognizeLines(in: cgImage) {
-            print(line)
+    let sorted = try recognizeLines(in: cgImage).sorted { lhs, rhs in
+        if abs(lhs.box.midY - rhs.box.midY) > 0.012 {
+            return lhs.box.midY > rhs.box.midY
         }
-    } else {
-        var y = 0
-        while y < cgImage.height {
-            let height = min(maxSliceHeight, cgImage.height - y)
-            let rect = CGRect(x: 0, y: y, width: cgImage.width, height: height)
-            if let slice = cgImage.cropping(to: rect) {
-                for line in try recognizeLines(in: slice) {
-                    print(line)
-                }
-            }
-            if y + height >= cgImage.height {
-                break
-            }
-            y += maxSliceHeight - sliceOverlap
+        return lhs.box.minX < rhs.box.minX
+    }
+
+    var lastText = ""
+    var lastBox = CGRect.null
+    for line in sorted {
+        if line.text == lastText,
+           abs(line.box.midY - lastBox.midY) < 0.01,
+           abs(line.box.minX - lastBox.minX) < 0.04 {
+            continue
         }
+        print(line.text)
+        lastText = line.text
+        lastBox = line.box
     }
 } catch {
     fputs("vision error: \(error)\n", stderr)

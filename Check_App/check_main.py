@@ -60,6 +60,32 @@ def pad_display(s, width):
 def log_status(label, status, width=42):
     print(f"{pad_display(label, width)}{status}")
 
+
+def display_file_link(path):
+    try:
+        resolved = Path(path).expanduser()
+        home = Path.home()
+        downloads = home / "Downloads"
+        desktop = home / "Desktop"
+        if resolved == downloads:
+            return "Download/"
+        if resolved.parent == downloads:
+            return f"Download/{resolved.name}"
+        if resolved == desktop:
+            return "Desktop/"
+        try:
+            rel_desktop = resolved.relative_to(desktop)
+            return f"Desktop/{rel_desktop}"
+        except ValueError:
+            pass
+        try:
+            return str(resolved.relative_to(home))
+        except ValueError:
+            return str(resolved)
+    except Exception:
+        return str(path)
+
+
 DEBUG_TIMING = os.environ.get("TOOLBOX_WEEKLY_DEBUG_TIMING") == "1"
 
 def debug_timing(start_time, label):
@@ -688,8 +714,6 @@ def main():
 
     wb.save(out_path)
 
-    output = Path(out_path)
-    folder_name = output.parent.name or "."
-    print("=" * 51 + f"\n👉 已生成：{folder_name}/{output.name}\n")
+    print("=" * 51 + f"\n👉 已生成：{display_file_link(out_path)}\n")
 
 if __name__ == "__main__": main()

@@ -1,0 +1,8 @@
+1. 每日分配
+    - 仅删除这2条提示
+        - [截图] 已保存: /Users/neirong/Downloads/AI_search_fail_1782281248.png
+        - [截图] 已保存: /Users/neirong/Downloads/答题卡_search_fail_1782281257.png
+    - OCR识别结果不对：/Users/neirong/Desktop/截屏2026-06-23 下午6.05.18.png，查找原因，修改好
+2. dock栏如图：/Users/neirong/Desktop/截屏2026-06-24 下午2.13.30.png，toolbox.app的图标改成跟
+    其它软件一样的大小，现在看它比别的大一点点；中间的彩色图形再等比例放大一点点
+3. 改好打包，参考：Toolbox/AGENTS.md

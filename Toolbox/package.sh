@@ -58,6 +58,16 @@ find "$BUILD_DIR/Toolbox.app" -name __pycache__ -type d -prune -exec rm -rf {} +
 # Strip symbols
 strip -x "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg" 2>/dev/null || true
 thin_check_pkg "$BUILD_ARCH" "$BUILD_DIR/Toolbox.app"
+APP_ICONSET_SRC="Toolbox/Resources/Assets.xcassets/AppIcon.appiconset"
+APP_ICON_OUT="$BUILD_DIR/Toolbox.app/Contents/Resources/AppIcon.icns"
+if [ -d "$APP_ICONSET_SRC" ]; then
+    TMP_ICON_ROOT="$(mktemp -d)"
+    TMP_ICONSET="$TMP_ICON_ROOT/AppIcon.iconset"
+    mkdir -p "$TMP_ICONSET"
+    cp "$APP_ICONSET_SRC"/icon_*.png "$TMP_ICONSET"/
+    iconutil -c icns "$TMP_ICONSET" -o "$APP_ICON_OUT"
+    rm -rf "$TMP_ICON_ROOT"
+fi
 # Re-sign after resource slimming; removing sealed resources invalidates the Xcode signature.
 codesign --force --deep --sign - --timestamp=none "$BUILD_DIR/Toolbox.app"
 

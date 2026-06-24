@@ -284,13 +284,14 @@ def _query_visible_task_names(page) -> List[str]:
         return []
 
 
-def _take_screenshot(page, name: str):
+def _take_screenshot(page, name: str, announce: bool = True):
     try:
         download_dir = Path(os.environ.get("DOWNLOAD_DIR", str(Path.home() / "Downloads")))
         path = download_dir / f"{name}_{int(time.time())}.png"
         path.parent.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(path))
-        print(f"[截图] 已保存: {path}")
+        if announce:
+            print(f"[截图] 已保存: {path}")
     except Exception as e:
         print(f"[截图] 失败: {e}")
 
@@ -509,7 +510,7 @@ def _download_one_table(
         )
         if not ok_filter:
             print(f"E002：{label} 搜索结果匹配失败（期望：{current_task_name}）")
-            _take_screenshot(page, f"{label}_search_fail")
+            _take_screenshot(page, f"{label}_search_fail", announce=False)
             return False
 
         _wait_before_export(page, current_task_name, label, require_subject_suffix)
@@ -667,7 +668,7 @@ def validate_downloaded_task(path: Path, expected_task_name: str, require_subjec
         return False
 
 
-def read_tasks(path: Path, cap: int) -> Tuple[List[str], List[TaskRow]]:
+def read_tasks(path: Path, cap: int) -> Tuple[List[str], List[TaskRow], float]:
     wb = load_workbook(path, data_only=True)
     ws = wb.worksheets[0]
     header_row, start_col = None, 3
@@ -701,8 +702,9 @@ def read_tasks(path: Path, cap: int) -> Tuple[List[str], List[TaskRow]]:
         cols = [ws.cell(r, c).value for c in range(start_col, start_col + 11)]
         out.append(TaskRow(order=order, cols=cols, subtask_id=subtask, pages=pages, tags=tags))
         order += 1
+    source_pages = sum(page_weight(row) for row in out)
     if cap <= 0:
-        return source_headers, []
+        return source_headers, [], source_pages
     # DP subset near cap; allow slight overflow to find better balance
     weights = [max(1, int(round(r.pages))) for r in out]
     # Allow more overflow in search to find more precise target
@@ -737,7 +739,7 @@ def read_tasks(path: Path, cap: int) -> Tuple[List[str], List[TaskRow]]:
         picked_idx.add(i)
         s = prev_sum[s]
     picked = [out[i] for i in sorted(picked_idx, key=lambda x: out[x].order)]
-    return source_headers, picked
+    return source_headers, picked, source_pages
 
 
 def lev(a: str, b: str) -> int:
@@ -866,10 +868,14 @@ def parse_signup_from_shots(shots: List[Path], names: List[str]) -> Tuple[Dict[s
     def parse_count_near(text: str, start: int, end: int) -> int | None:
         left = max(0, start - 8)
         right = min(len(text), end + 12)
-        segment = text[left:right]
-        nums = [int(x) for x in re.findall(r"(?<!\d)([235])(?!\d)", segment)]
+        after = text[end:right]
+        m = re.search(r"(?<!\d)([235])(?!\d)", after)
+        if m:
+            return int(m.group(1))
+        before = text[left:start]
+        nums = [int(x) for x in re.findall(r"(?<!\d)([235])(?!\d)", before)]
         if nums:
-            return nums[0]
+            return nums[-1]
         return None
 
     shot_texts = load_signup_texts(shots)
@@ -1522,8 +1528,9 @@ def main() -> int:
     card_headers = ai_headers[:]
     ai_rows, card_rows = [], []
     ai_tasks, card_tasks = [], []
-    if ai: ai_headers, ai_tasks = read_tasks(ai, ai_cap)
-    if card: card_headers, card_tasks = read_tasks(card, card_cap)
+    ai_source_pages, card_source_pages = 0.0, 0.0
+    if ai: ai_headers, ai_tasks, ai_source_pages = read_tasks(ai, ai_cap)
+    if card: card_headers, card_tasks, card_source_pages = read_tasks(card, card_cap)
     if not ai_tasks and not card_tasks:
         print("E002：没有可分配的 AI 或 答题卡任务表")
         return 1
@@ -1552,9 +1559,12 @@ def main() -> int:
     downloaded_line = " , ".join(downloaded)
     source_line_label = "源文件" if uploaded_source_files else "已下载"
     checker_line = "，".join(f"{name} {fmt_pages(checker_totals.get(name, 0.0))} 页" for name in CHECKERS)
+    assigned_total_pages = sum(sheet_page_totals.values())
+    checked_total_pages = sum(checker_totals.values())
+    check_ratio = checked_total_pages / assigned_total_pages * 100.0 if assigned_total_pages > 0 else 0.0
     print("\n------------------------------")
-    print(f"[检查] AI共 {fmt_pages(sheet_page_totals.get('AI', 0.0))} 页， 答题卡共 {fmt_pages(sheet_page_totals.get('答题卡', 0.0))} 页")
-    print(f"[分配] {checker_line}")
+    print(f"[统计] 已分配：AI {fmt_pages(sheet_page_totals.get('AI', 0.0))} 页（共{fmt_pages(ai_source_pages)}页）， 答题卡 {fmt_pages(sheet_page_totals.get('答题卡', 0.0))} 页（共{fmt_pages(card_source_pages)}页）")
+    print(f"[分配检查] {checker_line}（共{check_ratio:.1f}%）")
     print("------------------------------")
     if downloaded_line:
         print(f"👉 {source_line_label}：{downloaded_line}\n")

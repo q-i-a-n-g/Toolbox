@@ -22,6 +22,8 @@ struct DailyAssignPane: View {
     let onReset: () -> Void
     let onRemove: (UUID) -> Void
 
+    @State private var draggingRowID: UUID?
+
     var body: some View {
         VStack(spacing: 10) {
             if stage == .confirming {
@@ -140,6 +142,12 @@ struct DailyAssignPane: View {
                     LazyVStack(spacing: 8) {
                         ForEach($rows) { $row in
                             HStack(spacing: 14) {
+                                Image(systemName: "line.3.horizontal")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 14)
+                                    .help("拖动调整顺序")
+
                                 Picker("", selection: $row.name) {
                                     ForEach(names, id: \.self) { name in
                                         Text(name).tag(name)
@@ -192,6 +200,16 @@ struct DailyAssignPane: View {
                                     .fill(row.matched ? Color.white.opacity(0.03) : Color.orange.opacity(0.12))
                             )
                             .id(row.id)
+                            .opacity(draggingRowID == row.id ? 0.55 : 1)
+                            .onDrag {
+                                draggingRowID = row.id
+                                return NSItemProvider(object: row.id.uuidString as NSString)
+                            }
+                            .onDrop(of: [UTType.plainText], delegate: DailyAssignRowDropDelegate(
+                                targetID: row.id,
+                                draggingID: $draggingRowID,
+                                rows: $rows
+                            ))
                         }
                     }
                 }
@@ -222,6 +240,35 @@ struct DailyAssignPane: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color.white.opacity(0.1), lineWidth: 1)
         )
+    }
+}
+
+private struct DailyAssignRowDropDelegate: DropDelegate {
+    let targetID: UUID
+    @Binding var draggingID: UUID?
+    @Binding var rows: [DailyAssignSignupRow]
+
+    func validateDrop(info: DropInfo) -> Bool {
+        draggingID != nil
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard
+            let draggingID,
+            draggingID != targetID,
+            let from = rows.firstIndex(where: { $0.id == draggingID }),
+            let to = rows.firstIndex(where: { $0.id == targetID })
+        else { return }
+
+        let destination = to > from ? to + 1 : to
+        withAnimation(.easeInOut(duration: 0.16)) {
+            rows.move(fromOffsets: IndexSet(integer: from), toOffset: destination)
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingID = nil
+        return true
     }
 }
 

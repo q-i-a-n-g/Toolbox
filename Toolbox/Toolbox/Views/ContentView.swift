@@ -134,6 +134,7 @@ struct ContentView: View {
                     .padding(.bottom, 138)
                 }
             }
+            .animation(.spring(response: 0.32, dampingFraction: 0.86, blendDuration: 0.08), value: viewModel.isSidebarVisible)
 
             topToolButtons
                 .frame(maxWidth: .infinity, alignment: .trailing)
