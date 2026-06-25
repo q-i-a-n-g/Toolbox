@@ -11,8 +11,6 @@ if [ ! -f "$FILE" ]; then
 fi
 
 if ! grep -q '[^[:space:]]' "$FILE"; then
-    echo ""
-    echo " 👉  上方的 文本框 是空的，给它添加一些链接。"
     exit 1
 fi
 

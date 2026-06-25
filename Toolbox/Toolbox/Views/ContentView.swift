@@ -57,20 +57,8 @@ struct ContentView: View {
                                 textPane
                                 terminalPane(showEditorControls: false)
                             }
-                        } else if viewModel.dailyAssignStage == .confirming && viewModel.isDailyAssignConfirmPaneZoomed {
-                            DailyAssignPane(
-                                files: $viewModel.dailyAssignFiles,
-                                settings: $viewModel.dailyAssignSettings,
-                                stage: $viewModel.dailyAssignStage,
-                                rows: $viewModel.dailyAssignRows,
-                                names: viewModel.dailyAssignNames,
-                                canConfirm: viewModel.dailyAssignCanConfirm,
-                                isZoomed: viewModel.isDailyAssignConfirmPaneZoomed,
-                                onToggleZoom: viewModel.toggleDailyAssignConfirmPaneZoom,
-                                onAdd: viewModel.addDailyAssignRow,
-                                onReset: viewModel.resetDailyAssignRowsToOCR,
-                                onRemove: viewModel.removeDailyAssignRow
-                            )
+                        } else if viewModel.dailyAssignStage == .confirming {
+                            dailyAssignConfirmSplitPane
                         } else {
                             fixedTopTerminalSplitPane(
                                 topHeight: commonTopPaneHeight,
@@ -83,8 +71,9 @@ struct ContentView: View {
                                     rows: $viewModel.dailyAssignRows,
                                     names: viewModel.dailyAssignNames,
                                     canConfirm: viewModel.dailyAssignCanConfirm,
+                                    confirmIssue: viewModel.dailyAssignConfirmIssue,
                                     isZoomed: viewModel.isDailyAssignConfirmPaneZoomed,
-                                    onToggleZoom: viewModel.toggleDailyAssignConfirmPaneZoom,
+                                    onToggleZoom: { withPaneZoomAnimation(viewModel.toggleDailyAssignConfirmPaneZoom) },
                                     onAdd: viewModel.addDailyAssignRow,
                                     onReset: viewModel.resetDailyAssignRowsToOCR,
                                     onRemove: viewModel.removeDailyAssignRow
@@ -105,29 +94,20 @@ struct ContentView: View {
                         } bottom: {
                             terminalPane(showEditorControls: false)
                         }
-                    } else if viewModel.zoomTarget == .text && viewModel.shouldShowTextPane {
-                        textPane
-                    } else if (viewModel.zoomTarget == .terminal && viewModel.selectedTool.id == "open-links") || !viewModel.shouldShowTextPane {
-                        terminalPane(showEditorControls: !viewModel.shouldShowTextPane)
-                    } else if viewModel.selectedTool.id == "open-links" || viewModel.selectedTool.id == "download-images" {
-                        fixedTopTerminalSplitPane {
-                            textPane
-                        } bottom: {
-                            terminalPane(showEditorControls: false)
-                        }
+                    } else if viewModel.shouldShowTextPane {
+                        zoomableTextTerminalSplitPane
                     } else {
-                        fixedTopTerminalSplitPane {
-                            textPane
-                        } bottom: {
-                            terminalPane(showEditorControls: false)
-                        }
+                        terminalPane(showEditorControls: true)
                     }
                 }
                 .frame(minWidth: 360)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(red: 0.118, green: 0.118, blue: 0.118))
                 .overlay(alignment: .bottomTrailing) {
-                    HoneysuckleClearButton(isEnabled: !viewModel.isRunning) {
+                    HoneysuckleClearButton(
+                        isEnabled: honeysuckleClearEnabled,
+                        disabledHelp: honeysuckleDisabledHelp
+                    ) {
                         viewModel.clearAllToolInputs()
                     }
                     .padding(.trailing, 12)
@@ -153,6 +133,21 @@ struct ContentView: View {
 
     private var commonTopPaneHeight: CGFloat {
         252
+    }
+
+    private var honeysuckleClearEnabled: Bool {
+        !viewModel.isRunning && !(viewModel.selectedTool.id == "daily-assign" && viewModel.dailyAssignStage == .confirming)
+    }
+
+    private var honeysuckleDisabledHelp: String {
+        if viewModel.selectedTool.id == "daily-assign" && viewModel.dailyAssignStage == .confirming {
+            return ""
+        }
+        return "运行中不能清空"
+    }
+
+    private func withPaneZoomAnimation(_ action: () -> Void) {
+        action()
     }
 
     private func fixedTopTerminalSplitPane<Top: View, Bottom: View>(
@@ -235,7 +230,7 @@ struct ContentView: View {
                     helpButtonTitle: viewModel.helpButtonTitle,
                     isZoomed: viewModel.zoomTarget == .text,
                     onHelp: viewModel.toggleHelp,
-                    onToggleZoom: { viewModel.toggleZoom(for: .text) }
+                    onToggleZoom: { withPaneZoomAnimation { viewModel.toggleZoom(for: .text) } }
                 )
             } else {
                 TextInputPane(
@@ -250,14 +245,119 @@ struct ContentView: View {
                     showConfigButton: viewModel.selectedTool.id != "download-images" && viewModel.selectedTool.id != "weekly-check" && viewModel.selectedTool.id != "daily-assign",
                     helpButtonTitle: viewModel.helpButtonTitle,
                     configButtonTitle: viewModel.configButtonTitle,
+                    placeholder: textInputPlaceholder,
                     isZoomed: viewModel.zoomTarget == .text,
                     trimTrailingBlankLinesOnPaste: viewModel.selectedTool.id == "open-links" || viewModel.selectedTool.id == "download-images",
                     onHelp: viewModel.toggleHelp,
                     onConfig: viewModel.handleConfigButton,
-                    onToggleZoom: { viewModel.toggleZoom(for: .text) }
+                    onToggleZoom: { withPaneZoomAnimation { viewModel.toggleZoom(for: .text) } }
                 )
             }
         }
+    }
+
+    private var textInputPlaceholder: String {
+        if viewModel.selectedTool.id == "open-links" || viewModel.selectedTool.id == "download-images" {
+            return "粘贴 链接 到这里..."
+        }
+        return ""
+    }
+
+    private var zoomableTextTerminalSplitPane: some View {
+        GeometryReader { proxy in
+            let availableHeight = max(proxy.size.height, 0)
+            let normalTopHeight = fixedTopHeight(
+                availableHeight: availableHeight,
+                preferredTop: commonTopPaneHeight,
+                minTop: 140,
+                minBottom: 180
+            )
+            let terminalZoomed = viewModel.zoomTarget == .terminal && viewModel.selectedTool.id == "open-links"
+            let topHeight = viewModel.zoomTarget == .text ? availableHeight : (terminalZoomed ? 0 : normalTopHeight)
+            let bottomHeight = max(0, availableHeight - topHeight)
+
+            VStack(spacing: 0) {
+                textPane
+                    .frame(height: topHeight)
+                    .clipped()
+                    .allowsHitTesting(topHeight > 1)
+
+                terminalPane(showEditorControls: false)
+                    .frame(height: bottomHeight)
+                    .clipped()
+                    .allowsHitTesting(bottomHeight > 1)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .animation(.easeInOut(duration: 0.22), value: viewModel.zoomTarget)
+        }
+    }
+
+    private var dailyAssignConfirmSplitPane: some View {
+        GeometryReader { proxy in
+            let availableHeight = max(proxy.size.height, 0)
+            let actionBarHeight: CGFloat = 58
+            let normalTopHeight = fixedTopHeight(
+                availableHeight: availableHeight,
+                preferredTop: commonTopPaneHeight,
+                minTop: 220,
+                minBottom: 180
+            )
+            let topHeight = viewModel.isDailyAssignConfirmPaneZoomed ? max(0, availableHeight - actionBarHeight) : normalTopHeight
+            let bottomHeight = max(0, availableHeight - topHeight)
+
+            VStack(spacing: 0) {
+                dailyAssignConfirmPane
+                    .frame(height: topHeight)
+                    .clipped()
+
+                Group {
+                    if viewModel.isDailyAssignConfirmPaneZoomed {
+                        dailyAssignConfirmActionBar
+                    } else {
+                        terminalPane(showEditorControls: false)
+                    }
+                }
+                .transaction { transaction in
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
+                .frame(height: bottomHeight)
+                .clipped()
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .animation(.easeInOut(duration: 0.22), value: viewModel.isDailyAssignConfirmPaneZoomed)
+        }
+    }
+
+    private var dailyAssignConfirmPane: some View {
+        DailyAssignPane(
+            files: $viewModel.dailyAssignFiles,
+            settings: $viewModel.dailyAssignSettings,
+            stage: $viewModel.dailyAssignStage,
+            rows: $viewModel.dailyAssignRows,
+            names: viewModel.dailyAssignNames,
+            canConfirm: viewModel.dailyAssignCanConfirm,
+            confirmIssue: viewModel.dailyAssignConfirmIssue,
+            isZoomed: viewModel.isDailyAssignConfirmPaneZoomed,
+            onToggleZoom: { withPaneZoomAnimation(viewModel.toggleDailyAssignConfirmPaneZoom) },
+            onAdd: viewModel.addDailyAssignRow,
+            onReset: viewModel.resetDailyAssignRowsToOCR,
+            onRemove: viewModel.removeDailyAssignRow
+        )
+    }
+
+    private var dailyAssignConfirmActionBar: some View {
+        TerminalActionButtons(
+            isRunning: viewModel.isRunning,
+            canStop: dailyAssignCanStop,
+            canStart: viewModel.dailyAssignCanConfirm,
+            startButtonTitle: viewModel.dailyAssignStartButtonTitle,
+            onStart: viewModel.startSelectedTool,
+            onStop: viewModel.stopSelectedTool
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
     }
 
     private func terminalPane(showEditorControls: Bool) -> some View {
@@ -271,7 +371,14 @@ struct ContentView: View {
             }
             if toolID == "weekly-check" { return !viewModel.weeklyCheckFiles.isEmpty }
             if toolID == "stitch-images" { return viewModel.stitchImagesState.folderURL != nil }
+            if toolID == "open-links" || toolID == "download-images" {
+                return !viewModel.editorText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
             return true
+        }()
+        let canStop: Bool = {
+            if toolID == "daily-assign" { return dailyAssignCanStop }
+            return viewModel.isRunning
         }()
         return TerminalPaneView(
             outputText: viewModel.terminalText,
@@ -287,17 +394,23 @@ struct ContentView: View {
             onTerminalInput: viewModel.sendTerminalInput,
             onHelp: viewModel.toggleHelp,
             onConfig: viewModel.handleConfigButton,
-            onToggleZoom: { viewModel.toggleZoom(for: .terminal) },
+            onToggleZoom: { withPaneZoomAnimation { viewModel.toggleZoom(for: .terminal) } },
             onStart: viewModel.startSelectedTool,
             onStop: viewModel.stopSelectedTool,
+            canStop: canStop,
             canStart: canStart,
             startButtonTitle: toolID == "daily-assign" ? viewModel.dailyAssignStartButtonTitle : "开始"
         )
+    }
+
+    private var dailyAssignCanStop: Bool {
+        viewModel.isRunning || viewModel.dailyAssignStage == .confirming
     }
 }
 
 private struct HoneysuckleClearButton: View {
     let isEnabled: Bool
+    let disabledHelp: String
     let action: () -> Void
 
     @State private var isHovering = false
@@ -351,8 +464,20 @@ private struct HoneysuckleClearButton: View {
                 isHovering = hovering
             }
         }
-        .help(isEnabled ? "清空当前工具内容" : "运行中不能清空")
+        .modifier(OptionalHelpModifier(text: isEnabled ? "清空当前工具内容" : disabledHelp))
         .accessibilityLabel("清空当前工具内容")
+    }
+}
+
+private struct OptionalHelpModifier: ViewModifier {
+    let text: String
+
+    func body(content: Content) -> some View {
+        if text.isEmpty {
+            content
+        } else {
+            content.help(text)
+        }
     }
 }
 

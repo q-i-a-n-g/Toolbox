@@ -17,6 +17,7 @@ struct TerminalPaneView: View {
     let onToggleZoom: () -> Void
     let onStart: () -> Void
     let onStop: () -> Void
+    let canStop: Bool
     let canStart: Bool
     let startButtonTitle: String
 
@@ -37,22 +38,14 @@ struct TerminalPaneView: View {
                         .stroke(Color.white.opacity(0.22), lineWidth: 1)
                 )
 
-            HStack {
-                Button("停止", action: onStop)
-                    .buttonStyle(.bordered)
-                    .tint(.secondary)
-                    .keyboardShortcut(.cancelAction)
-                    .disabled(!isRunning)
-                    .controlSize(.large)
-                    .frame(minWidth: 110)
-
-                Button(startButtonTitle, action: onStart)
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(isRunning || !canStart)
-                    .controlSize(.large)
-                    .frame(minWidth: 110)
-            }
+            TerminalActionButtons(
+                isRunning: isRunning,
+                canStop: canStop,
+                canStart: canStart,
+                startButtonTitle: startButtonTitle,
+                onStart: onStart,
+                onStop: onStop
+            )
             .frame(maxWidth: .infinity)
             .padding(.top, 12)
         }
@@ -95,5 +88,33 @@ struct TerminalPaneView: View {
             }
         }
         .padding(.bottom, 10)
+    }
+}
+
+struct TerminalActionButtons: View {
+    let isRunning: Bool
+    let canStop: Bool
+    let canStart: Bool
+    let startButtonTitle: String
+    let onStart: () -> Void
+    let onStop: () -> Void
+
+    var body: some View {
+        HStack {
+            Button("停止", action: onStop)
+                .buttonStyle(.bordered)
+                .tint(.secondary)
+                .keyboardShortcut(.cancelAction)
+                .disabled(!canStop)
+                .controlSize(.large)
+                .frame(minWidth: 110)
+
+            Button(startButtonTitle, action: onStart)
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(isRunning || !canStart)
+                .controlSize(.large)
+                .frame(minWidth: 110)
+        }
     }
 }

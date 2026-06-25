@@ -110,6 +110,7 @@ struct WeeklyCheckDropZoneView: View {
             merged.append(url)
         }
         files = merged
+        activateToolboxWindowAfterDrop()
     }
 
     private func refreshPasteAvailability() {

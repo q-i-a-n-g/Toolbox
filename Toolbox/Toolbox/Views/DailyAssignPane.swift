@@ -2,6 +2,11 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
+func activateToolboxWindowAfterDrop() {
+    NSApplication.shared.activate(ignoringOtherApps: true)
+    NSApplication.shared.windows.first(where: { $0.isVisible })?.makeKeyAndOrderFront(nil)
+}
+
 struct DailyAssignSettings {
     var allocationMethod: String = "page"
     var aiMaxPages: Int = 200
@@ -16,6 +21,7 @@ struct DailyAssignPane: View {
     @Binding var rows: [DailyAssignSignupRow]
     let names: [String]
     let canConfirm: Bool
+    let confirmIssue: String?
     let isZoomed: Bool
     let onToggleZoom: () -> Void
     let onAdd: () -> Void
@@ -133,7 +139,7 @@ struct DailyAssignPane: View {
                     Image(systemName: isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                 }
                 .buttonStyle(.borderless)
-                .help(isZoomed ? "恢复分栏" : "铺满右侧")
+                .help(isZoomed ? "恢复分栏" : "放大到最大")
             }
             .buttonStyle(.bordered)
 
@@ -224,8 +230,8 @@ struct DailyAssignPane: View {
             }
             .frame(minHeight: 180, maxHeight: isZoomed ? .infinity : 360)
 
-            if !canConfirm {
-                Text("请先完成有效名单确认后再点击下方“继续”")
+            if let confirmIssue {
+                Text(confirmIssue)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -261,9 +267,7 @@ private struct DailyAssignRowDropDelegate: DropDelegate {
         else { return }
 
         let destination = to > from ? to + 1 : to
-        withAnimation(.easeInOut(duration: 0.16)) {
-            rows.move(fromOffsets: IndexSet(integer: from), toOffset: destination)
-        }
+        rows.move(fromOffsets: IndexSet(integer: from), toOffset: destination)
     }
 
     func performDrop(info: DropInfo) -> Bool {
@@ -374,6 +378,7 @@ private struct DailyAssignDropZoneView: View {
             merged.append(url)
         }
         files = merged
+        activateToolboxWindowAfterDrop()
     }
 
     private func refreshPasteAvailability() {
@@ -405,6 +410,7 @@ struct StitchImagesPane: View {
                 stitchModeButton(title: "左右\n两两拼接", mode: "3", layout: .horizontal(count: 2))
             }
             .frame(maxWidth: .infinity)
+            .offset(y: 18)
 
             Spacer(minLength: 0)
         }
@@ -439,7 +445,6 @@ struct StitchImagesPane: View {
             )
         }
         .buttonStyle(.plain)
-        .help(title.replacingOccurrences(of: "\n", with: ""))
     }
 }
 
@@ -546,6 +551,7 @@ private struct StitchFolderDropZone: View {
             var isDir: ObjCBool = false
             if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
                 onDrop(url)
+                activateToolboxWindowAfterDrop()
                 return
             }
         }

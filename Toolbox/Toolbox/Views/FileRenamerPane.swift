@@ -195,6 +195,7 @@ struct DropZoneView: View {
             return
         }
         onDrop(valid)
+        activateToolboxWindowAfterDrop()
         refreshPasteAvailability()
     }
 
@@ -218,6 +219,7 @@ struct DropZoneView: View {
             let valid = validTargetURLs(urls)
             if !valid.isEmpty {
                 onDrop(valid)
+                activateToolboxWindowAfterDrop()
             }
         }
     }

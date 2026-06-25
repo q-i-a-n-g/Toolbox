@@ -112,39 +112,17 @@ def _start_focus_command(args, wait_seconds=0.08):
 
 
 def focus_toolbox_app():
-    app_path = os.environ.get("TOOLBOX_APP_PATH", "").strip()
     script = """
-on run argv
-set targetPath to ""
-if (count of argv) > 0 then set targetPath to item 1 of argv
-try
-  if targetPath is not "" then
-    set appAlias to POSIX file targetPath as alias
-    tell application appAlias to activate
-  else
-    tell application id "local.liu.Toolbox" to activate
-  end if
-on error errMsg
-  try
-    tell application id "local.liu.Toolbox" to activate
-  on error
-    tell application "Toolbox" to activate
-  end try
-end try
 try
   tell application "System Events"
-    set frontmost of first application process whose bundle identifier is "local.liu.Toolbox" to true
+    set toolboxProcesses to application processes whose bundle identifier is "local.liu.Toolbox"
+    if (count of toolboxProcesses) > 0 then
+      set frontmost of item 1 of toolboxProcesses to true
+    end if
   end tell
 end try
-end run
 """
-    requested = False
-    if app_path and os.path.exists(app_path):
-        requested = _start_focus_command(["/usr/bin/open", app_path]) or requested
-    requested = _start_focus_command(["/usr/bin/open", "-b", "local.liu.Toolbox"]) or requested
-    _start_focus_command(["/usr/bin/osascript", "-e", script, app_path], wait_seconds=0)
-    if requested:
-        return
+    _start_focus_command(["/usr/bin/osascript", "-e", script], wait_seconds=0)
 
 
 def close_browser_context_and_focus(browser_context, timing_start=None):
@@ -714,6 +692,9 @@ def main():
 
     wb.save(out_path)
 
-    print("=" * 51 + f"\n👉 已生成：{display_file_link(out_path)}\n")
+    print("=" * 51)
+    print(f"👉 下载目录：{display_file_link(download_dir)}")
+    print()
+    print(f"👉 已生成：{display_file_link(out_path)}\n")
 
 if __name__ == "__main__": main()

@@ -2,7 +2,7 @@ import Foundation
 import Combine
 import AppKit
 
-enum PaneZoomTarget {
+enum PaneZoomTarget: Equatable {
     case none
     case text
     case terminal
@@ -137,17 +137,35 @@ final class RootViewModel: ObservableObject {
     }
 
     var dailyAssignCanConfirm: Bool {
-        guard !dailyAssignRows.isEmpty else { return false }
+        dailyAssignConfirmIssue == nil
+    }
+
+    var dailyAssignConfirmIssue: String? {
+        guard !dailyAssignRows.isEmpty else { return "还没有报名人" }
         let validCounts = Set([2, 3, 5])
         var seen = Set<String>()
         var total = 0
-        for row in dailyAssignRows {
+        for (index, row) in dailyAssignRows.enumerated() {
             let n = row.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !n.isEmpty, dailyAssignNames.contains(n), validCounts.contains(row.count), !seen.contains(n) else { return false }
+            if n.isEmpty {
+                return "第 \(index + 1) 行姓名为空"
+            }
+            if !dailyAssignNames.contains(n) {
+                return "\(n) 不在校准名单中"
+            }
+            if !validCounts.contains(row.count) {
+                return "\(n) 的报名数量不是 2、3 或 5"
+            }
+            if seen.contains(n) {
+                return "已经有 \(n) 了"
+            }
             seen.insert(n)
             total += row.count
         }
-        return total > 0
+        if total <= 0 {
+            return "报名数量不能为 0"
+        }
+        return nil
     }
 
     var dailyAssignStartButtonTitle: String {
@@ -419,8 +437,8 @@ final class RootViewModel: ObservableObject {
 
         if selectedTool.id == "daily-assign", dailyAssignStage != .readyToRun {
             if dailyAssignStage == .confirming {
-                guard dailyAssignCanConfirm else {
-                    terminalText += "[识别] 请先完成上方报名结果确认\n"
+                if let issue = dailyAssignConfirmIssue {
+                    terminalText += "[识别] \(issue)\n"
                     return
                 }
                 dailyAssignStage = .readyToRun
@@ -602,6 +620,21 @@ final class RootViewModel: ObservableObject {
     }
 
     func stopSelectedTool() {
+        if selectedTool.id == "daily-assign", dailyAssignStage == .confirming {
+            terminalText += "\nE006：[已停止]\n"
+            if isRunning {
+                terminalService.stop()
+                isRunning = false
+            }
+            dailyAssignStage = .idle
+            dailyAssignRows = []
+            dailyAssignPreviewRowsBackup = []
+            isDailyAssignConfirmPaneZoomed = false
+            objectWillChange.send()
+            requestTerminalFocus()
+            return
+        }
+
         guard isRunning else { return }
         if selectedTool.id == "daily-assign" {
             terminalText += "\nE006：[已停止]\n"

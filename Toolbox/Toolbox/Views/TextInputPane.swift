@@ -10,6 +10,7 @@ struct TextInputPane: View {
     let showConfigButton: Bool
     let helpButtonTitle: String
     let configButtonTitle: String
+    let placeholder: String
     let isZoomed: Bool
     let trimTrailingBlankLinesOnPaste: Bool
     let onHelp: () -> Void
@@ -20,12 +21,23 @@ struct TextInputPane: View {
         VStack(spacing: 0) {
             header
 
-            PlainTextEditorView(
-                text: $text,
-                isFocused: $isFocused,
-                isEditable: isEditable,
-                trimTrailingBlankLinesOnPaste: trimTrailingBlankLinesOnPaste
-            )
+            ZStack(alignment: .topLeading) {
+                PlainTextEditorView(
+                    text: $text,
+                    isFocused: $isFocused,
+                    isEditable: isEditable,
+                    trimTrailingBlankLinesOnPaste: trimTrailingBlankLinesOnPaste
+                )
+
+                if text.isEmpty && !placeholder.isEmpty && isEditable {
+                    Text(placeholder)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundColor(Color.white.opacity(0.36))
+                        .padding(.leading, 12)
+                        .padding(.top, 11)
+                        .allowsHitTesting(false)
+                }
+            }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)

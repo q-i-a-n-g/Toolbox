@@ -31,8 +31,6 @@ if [ ! -f "$INPUT_FILE" ]; then
 fi
 
 if [ "$INPUT_FILE" = "$SCRIPT_DIR/links.txt" ] && ! grep -q '[^[:space:]]' "$INPUT_FILE"; then
-  echo ""
-  echo " 👉  上方的 文本框 是空的，给它添加一些链接。"
   exit 1
 fi
 
