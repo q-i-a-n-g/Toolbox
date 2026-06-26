@@ -17,7 +17,7 @@
 ## 3. 桥接与打包
 - **PTYTerminalService 的增强**：修改了 Swift 内的底层终端服务以支持动态注入环境变量（`EXTRA_ENV`），这样可以将拖拽的文件列表等在内存中的状态动态告知底层的终端拉起服务。
 - **胶水脚本桥接**：新增了 `.command` 脚本文件，它接收到环境变量后，再向 Python 发起标准的带参数调用请求。
-- **独立环境封装**：仓库中只提交 **`Resources/Binaries/check_main_pkg.zip`**（解压后约 137MB，其中 Playwright 的 `node` 单文件超过 GitHub 100MB 限制，故不提交解压目录）。Xcode 构建时自动解压到 `check_main_pkg/`。重新打包步骤见 `AGENTS.md`。
+- **独立环境封装**：仓库中只提交按架构拆分的 **`Resources/Binaries/check_main_pkg_arm64.zip`** 与 **`Resources/Binaries/check_main_pkg_x86_64.zip`**（解压后包含 Playwright 的 `node`，故不提交解压目录）。Xcode 构建时按目标架构自动解压到 app bundle 内的 `check_main_pkg/`。重新打包步骤见 `AGENTS.md`。
 
 ## 下一步
 您可以直接运行 Xcode 或执行打包脚本 (`package.sh`) 来体验最终版的 `Toolbox`，在左侧选择“周检制表”，将带有“负责人”字段的测试表单拖入上方，然后点击“开始”，即可见证终端打出的下载进度及同级目录下生成的新 `result.xlsx` 文件。

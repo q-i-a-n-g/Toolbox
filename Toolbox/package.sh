@@ -24,17 +24,6 @@ rm -f build/Toolbox_AppleSilicon.zip build/Toolbox_Intel.zip
 rm -f Toolbox_AppleSilicon.zip Toolbox_Intel.zip
 find Toolbox/Resources -name __pycache__ -type d -prune -exec rm -rf {} +
 
-OCR_SWIFT="Toolbox/Resources/Binaries/ocr_vision.swift"
-OCR_BIN="Toolbox/Resources/Binaries/ocr_vision_bin"
-if [ -f "$OCR_SWIFT" ]; then
-    SWIFT_MODULE_CACHE="${TMPDIR:-/tmp}/toolbox_swift_module_cache"
-    mkdir -p "$SWIFT_MODULE_CACHE"
-    CLANG_MODULE_CACHE_PATH="$SWIFT_MODULE_CACHE" SWIFT_MODULE_CACHE_PATH="$SWIFT_MODULE_CACHE" \
-        xcrun swiftc -O -module-cache-path "$SWIFT_MODULE_CACHE" \
-        -target "${BUILD_ARCH}-apple-macos12.3" "$OCR_SWIFT" -o "$OCR_BIN"
-    chmod +x "$OCR_BIN"
-fi
-
 thin_binary_if_possible() {
     local arch="$1"
     local path="$2"
@@ -57,7 +46,7 @@ thin_check_pkg() {
 }
 
 echo "Building for $BUILD_LABEL ($BUILD_ARCH)..."
-xcodebuild -project Toolbox.xcodeproj -scheme "$SCHEME" -configuration Release \
+TOOLBOX_BUILD_ARCH="$BUILD_ARCH" xcodebuild -project Toolbox.xcodeproj -scheme "$SCHEME" -configuration Release \
     ARCHS="$BUILD_ARCH" ONLY_ACTIVE_ARCH=NO \
     -derivedDataPath "$DERIVED_DATA_DIR" \
     CONFIGURATION_BUILD_DIR="$(pwd)/$BUILD_DIR" \
@@ -67,6 +56,8 @@ xcodebuild -project Toolbox.xcodeproj -scheme "$SCHEME" -configuration Release \
 rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg_arm.zip"
 rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg_intel.zip"
 rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/check_main_pkg.zip"
+rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/check_main_pkg_arm64.zip"
+rm -f "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/check_main_pkg_x86_64.zip"
 find "$BUILD_DIR/Toolbox.app" -name __pycache__ -type d -prune -exec rm -rf {} +
 # Strip symbols
 strip -x "$BUILD_DIR/Toolbox.app/Contents/Resources/Binaries/ffmpeg" 2>/dev/null || true
@@ -88,6 +79,9 @@ codesign --force --deep --sign - --timestamp=none "$BUILD_DIR/Toolbox.app"
 # Cleanup the unpacked source binary and architecture log to keep workspace pristine
 rm -f Toolbox/Resources/Binaries/ffmpeg
 rm -f Toolbox/Resources/Binaries/.last_ffmpeg_arch
+rm -rf Toolbox/Resources/Binaries/check_main_pkg
+rm -f Toolbox/Resources/Binaries/check_main_pkg.zip
+rm -f Toolbox/Resources/Binaries/ocr_vision_bin
 
 echo "Packaging complete! App is available at:"
 echo "  $BUILD_DIR/Toolbox.app"

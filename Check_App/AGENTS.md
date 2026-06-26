@@ -61,7 +61,8 @@ The application operates in a multi-stage workflow:
    - Playwright uses a local Chrome context to preserve login cookies. Avoid headless operations if they break the auth state.
 
 3. **Packaging Updates**:
-   - If you make changes to `check_main.py` or `daily_assign_main.py`, rebuild the shared onedir package with PyInstaller and refresh `Toolbox/Resources/Binaries/check_main_pkg.zip`.
+   - If you make changes to `check_main.py` or `daily_assign_main.py`, rebuild the shared onedir package with PyInstaller on the current Mac architecture and refresh only the matching Toolbox resource zip: `Toolbox/Resources/Binaries/check_main_pkg_arm64.zip` on Apple Silicon, or `Toolbox/Resources/Binaries/check_main_pkg_x86_64.zip` on Intel.
+   - Do not overwrite the other architecture's zip when rebuilding. The Toolbox package script selects the correct zip at build time, so both Macs can share identical source code without repeatedly dirtying architecture-specific artifacts.
    - Do not run `lipo -thin` on PyInstaller executables after build. PyInstaller appends its archive to the Mach-O file, and post-build thinning breaks that archive. Only Playwright's embedded `driver/node` may be thinned inside the final Toolbox app bundle.
 
 4. **Formatting Constraints**:

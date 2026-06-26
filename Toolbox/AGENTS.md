@@ -23,15 +23,17 @@ Toolbox 是一个原生的 macOS 应用程序，旨在为常用的 Bash 脚本�
 - `/Toolbox/ViewModels/`: `RootViewModel` 负责核心业务流转。
 - `/Toolbox/Services/`: 负责进程管理和 IO 拦截。
 - `/Toolbox/Resources/Scripts/`: 存放所有 `.command` 业务脚本。
-- `/Toolbox/Resources/Binaries/`: 存放 `ffmpeg` (拆分为针对不同架构的 **`ffmpeg_arm.zip`** 与 **`ffmpeg_intel.zip`**) 等二进制工具；周检制表使用 **`check_main_pkg.zip`**（约 48MB，可上 GitHub）与解压后的 `check_main_pkg/`。解压目录内 Playwright 自带的 **`node` 约 112MB**，超过 GitHub 单文件 100MB 限制，**不得**将 `check_main_pkg/` 提交到 Git。Xcode 在 **Resources 阶段前** 会运行 *Unpack check_main_pkg* 脚本：在编译/打包时自动检测目标架构，并解压对应的 zip 到本地 `ffmpeg` 二进制，若 zip 更新、或目标架构改变、或 `check_main_bin` 不存在，则执行解压。更新周检逻辑后：在 `Check_App` 执行 `python3 -m PyInstaller --noconfirm check_main_bin.spec`，再在仓库根执行：
+- `/Toolbox/Resources/Binaries/`: 存放按架构拆分的二进制资源。`ffmpeg` 使用 **`ffmpeg_arm.zip`** 与 **`ffmpeg_intel.zip`**；周检制表/每日分配共用 PyInstaller onedir 包，使用 **`check_main_pkg_arm64.zip`** 与 **`check_main_pkg_x86_64.zip`**。解压目录 `check_main_pkg/` 内 Playwright 自带的 **`node`** 超过 GitHub 单文件 100MB 限制，**不得**将 `check_main_pkg/` 提交到 Git。Xcode 在 **Resources 阶段后** 运行 *Prepare binary resources* 脚本：根据目标架构把对应 zip 解压到 app bundle 内，并在 app bundle 内编译 `ocr_vision.swift` 为 `ocr_vision_bin`；该脚本不得把 `check_main_pkg/`、`ffmpeg`、`ocr_vision_bin` 写回源码目录。更新周检逻辑后：在对应架构的 Mac 上进入 `Check_App` 执行 `python3 -m PyInstaller --noconfirm check_main_bin.spec`，再在仓库根执行：
 ```bash
 REPO="$(git rev-parse --show-toplevel)"
+ARCH="$(uname -m)"
 cd "$REPO/Toolbox/Toolbox/Resources/Binaries"
-rm -rf check_main_pkg check_main_pkg.zip
+rm -rf check_main_pkg "check_main_pkg_${ARCH}.zip"
 cp -R "$REPO/Check_App/dist/check_main_bin" ./check_main_pkg
-zip -rq check_main_pkg.zip check_main_pkg -x "*.DS_Store"
+zip -rq "check_main_pkg_${ARCH}.zip" check_main_pkg -x "*.DS_Store"
+rm -rf check_main_pkg
 ```
-  然后提交 **`check_main_pkg.zip`**。每日分配逻辑与 `check_main_bin` 共用该 onedir 包，更新 `Check_App/daily_assign_main.py` 后也必须按同一流程重新生成 `check_main_pkg.zip`。
+  然后只提交当前机器对应的 **`check_main_pkg_${ARCH}.zip`**，不要覆盖另一架构 zip。每日分配逻辑与 `check_main_bin` 共用该 onedir 包，更新 `Check_App/daily_assign_main.py` 后也必须按同一流程重新生成当前架构 zip；另一台 Mac 需要在自己的架构上重新生成对应 zip。
 - `/Toolbox/Resources/tool_config.json`: 工具注册中心。
 
 ## 4. 开发规范 (Development Conventions)
@@ -63,7 +65,7 @@ zip -rq check_main_pkg.zip check_main_pkg -x "*.DS_Store"
 cd Toolbox   # 即包含 Toolbox.xcodeproj 的目录
 ./package.sh
 ```
-在打包时，Xcode 运行脚本会根据当前机器芯片自动将对应的架构版本 `ffmpeg_arm.zip` 或 `ffmpeg_intel.zip` 解压为 `Binaries/ffmpeg`。这避免了使用庞大的 Universal 合并架构，同时大幅缩小安装包的体积。
+在打包时，Xcode 运行脚本会根据目标架构自动将对应的 `ffmpeg_*` 与 `check_main_pkg_*` zip 解压到 app bundle 内，并在 app bundle 内生成 `ocr_vision_bin`。这避免了使用庞大的 Universal 合并架构，同时不会因为打包而修改源码目录里的架构产物。
 打包产物只保留当前架构的 `.app`，不再生成压缩后的 `.zip` 文件：Apple 芯片机器产物为 `Toolbox/build/arm64/Toolbox.app`，Intel 机器产物为 `Toolbox/build/x86_64/Toolbox.app`。可选环境变量：`TOOLBOX_SCHEME`（默认 `ScriptToolbox`）。
 
 手动示例：
@@ -76,7 +78,8 @@ lipo -extract arm64 ffmpeg -output ffmpeg_thin
 
 - **架构分发**: 以后**不再使用**单一的 Universal 包，也不在同一台机器上同时输出两套架构；电脑是什么芯片，就只打对应架构的一个 `.app`。需要另一架构时，在对应芯片的 Mac 上运行 `./package.sh`。
 - **二进制瘦身**: 打包前必须使用 `lipo` 对内置的二进制文件（如 `ffmpeg`）进行提纯（Thinning），仅保留当前安装包所需的单一架构，以减小体积。
-- **PyInstaller 包瘦身边界**: `check_main_pkg` 内的 PyInstaller 启动器（`check_main_bin`、`daily_assign_main_bin`）不能在打包后再 `lipo -thin`，因为 PyInstaller 归档附在 Mach-O 后面，瘦身会破坏归档偏移。只允许瘦身 Playwright 自带的 `check_main_pkg/_internal/playwright/driver/node`。Xcode 解包脚本必须按目标架构校验已解开的 `check_main_pkg`，避免把上一次构建残留的 Intel/Apple 单架构文件复制进另一版安装包。
+- **源码目录保持干净**: 纯打包不应改变 `Toolbox/Resources/Binaries/check_main_pkg_*`、`ffmpeg_*`、`ocr_vision.swift` 之外的源码资源；`check_main_pkg/`、`ffmpeg`、`.last_ffmpeg_arch`、`ocr_vision_bin` 都是本地/构建产物，不应提交。
+- **PyInstaller 包瘦身边界**: `check_main_pkg` 内的 PyInstaller 启动器（`check_main_bin`、`daily_assign_main_bin`）不能在打包后再 `lipo -thin`，因为 PyInstaller 归档附在 Mach-O 后面，瘦身会破坏归档偏移。只允许瘦身 Playwright 自带的 `check_main_pkg/_internal/playwright/driver/node`。Xcode 解包脚本必须选择目标架构对应的 `check_main_pkg_arm64.zip` 或 `check_main_pkg_x86_64.zip`，避免把另一台机器生成的单架构文件复制进当前安装包。
 - **零依赖**: 所有的外部工具必须包含在资源包内。
 - **签名**: 即使是 Ad-hoc 签名 (`-`) 也必须存在。若打包过程中删除 App Bundle 内的 zip 或其他资源以瘦身，必须在删除后重新执行 `codesign --force --deep --sign - --timestamp=none Toolbox.app`，否则资源封印会引用已删除文件，`codesign --verify --deep --strict` 会失败。
 

@@ -58,10 +58,17 @@ fi
 
 # Process check_main_pkg
 echo "Processing check_main_pkg..."
-if [ -f "check_main_pkg.zip" ]; then
+ARCH=$(uname -m)
+if [ "$ARCH" = "arm64" ]; then
+    CHECK_PKG_ZIP="check_main_pkg_arm64.zip"
+else
+    CHECK_PKG_ZIP="check_main_pkg_x86_64.zip"
+fi
+if [ -f "$CHECK_PKG_ZIP" ]; then
     rm -rf check_main_pkg  # Remove old directory
-    unzip -o check_main_pkg.zip
+    unzip -o "$CHECK_PKG_ZIP"
     chmod +x check_main_pkg/check_main_bin
+    chmod +x check_main_pkg/daily_assign_main_bin
     
     # Optimization: Strip Node.js binary (suppress code signature warning)
     strip check_main_pkg/_internal/playwright/driver/node 2>&1 | grep -v "code signature" || true
@@ -74,7 +81,7 @@ if [ -f "check_main_pkg.zip" ]; then
     rm -rf check_main_pkg/_internal/playwright/driver/package/bin
     rm -rf check_main_pkg/_internal/playwright/driver/package/lib/vite
     
-    rm -f check_main_pkg.zip
+    rm -f check_main_pkg_arm64.zip check_main_pkg_x86_64.zip check_main_pkg.zip
     echo "✓ check_main_pkg optimized"
 fi
 
