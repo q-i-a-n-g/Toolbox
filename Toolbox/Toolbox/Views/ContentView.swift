@@ -228,6 +228,8 @@ struct ContentView: View {
                     title: viewModel.editorTitle,
                     text: viewModel.editorText,
                     helpButtonTitle: viewModel.helpButtonTitle,
+                    reserveConfigSlot: viewModel.selectedTool.id == "open-links",
+                    reserveZoomSlot: true,
                     isZoomed: viewModel.zoomTarget == .text,
                     onHelp: viewModel.toggleHelp,
                     onToggleZoom: { withPaneZoomAnimation { viewModel.toggleZoom(for: .text) } }
@@ -325,7 +327,10 @@ struct ContentView: View {
                 .clipped()
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .animation(.easeInOut(duration: 0.22), value: viewModel.isDailyAssignConfirmPaneZoomed)
+            .transaction { transaction in
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
         }
     }
 

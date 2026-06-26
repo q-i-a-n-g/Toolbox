@@ -1,6 +1,72 @@
 import SwiftUI
 import AppKit
 
+private enum PaneHeaderMetrics {
+    static let textButtonWidth: CGFloat = 46
+    static let zoomButtonWidth: CGFloat = 26
+}
+
+private struct StablePaneHeaderControls: View {
+    let showHelpButton: Bool
+    let helpButtonTitle: String
+    let onHelp: () -> Void
+    let showConfigButton: Bool
+    let configButtonTitle: String
+    let onConfig: () -> Void
+    let reserveConfigSlot: Bool
+    let showZoomButton: Bool
+    let reserveZoomSlot: Bool
+    let isZoomed: Bool
+    let onToggleZoom: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if showHelpButton {
+                headerTextButton(
+                    title: helpButtonTitle,
+                    isEmphasized: helpButtonTitle == "关闭",
+                    action: onHelp
+                )
+            }
+
+            if showConfigButton {
+                headerTextButton(
+                    title: configButtonTitle,
+                    isEmphasized: configButtonTitle == "保存",
+                    action: onConfig
+                )
+            } else if reserveConfigSlot {
+                Color.clear
+                    .frame(width: PaneHeaderMetrics.textButtonWidth, height: 20)
+                    .allowsHitTesting(false)
+            }
+
+            if showZoomButton {
+                Button(action: onToggleZoom) {
+                    Image(systemName: isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                        .frame(width: PaneHeaderMetrics.zoomButtonWidth)
+                }
+                .buttonStyle(.borderless)
+                .help(isZoomed ? "恢复分栏" : "放大到最大")
+            } else if reserveZoomSlot {
+                Color.clear
+                    .frame(width: PaneHeaderMetrics.zoomButtonWidth, height: 20)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private func headerTextButton(title: String, isEmphasized: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .fontWeight(isEmphasized ? .bold : .regular)
+                .foregroundColor(isEmphasized ? .accentColor : .primary)
+                .frame(width: PaneHeaderMetrics.textButtonWidth)
+        }
+        .buttonStyle(.borderless)
+    }
+}
+
 struct TextInputPane: View {
     let title: String
     @Binding var text: String
@@ -58,31 +124,19 @@ struct TextInputPane: View {
 
             Spacer()
 
-            if showHelpButton {
-                Button(action: onHelp) {
-                    Text(helpButtonTitle)
-                        .fontWeight(helpButtonTitle == "关闭" ? .bold : .regular)
-                        .foregroundColor(helpButtonTitle == "关闭" ? .accentColor : .primary)
-                }
-                .buttonStyle(.borderless)
-            }
-
-            if showConfigButton {
-                Button(action: onConfig) {
-                    Text(configButtonTitle)
-                        .fontWeight(configButtonTitle == "保存" ? .bold : .regular)
-                        .foregroundColor(configButtonTitle == "保存" ? .accentColor : .primary)
-                }
-                .buttonStyle(.borderless)
-            }
-
-            if isEditable {
-                Button(action: onToggleZoom) {
-                    Image(systemName: isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                }
-                .buttonStyle(.borderless)
-                .help(isZoomed ? "恢复分栏" : "放大到最大")
-            }
+            StablePaneHeaderControls(
+                showHelpButton: showHelpButton,
+                helpButtonTitle: helpButtonTitle,
+                onHelp: onHelp,
+                showConfigButton: showConfigButton,
+                configButtonTitle: configButtonTitle,
+                onConfig: onConfig,
+                reserveConfigSlot: false,
+                showZoomButton: isEditable,
+                reserveZoomSlot: false,
+                isZoomed: isZoomed,
+                onToggleZoom: onToggleZoom
+            )
         }
         .padding(.bottom, 10)
     }
@@ -97,55 +151,58 @@ struct OpenLinksConfigPane: View {
     let onConfig: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("配置")
                     .font(.headline)
 
                 Spacer()
 
-                Button(action: onHelp) {
-                    Text(helpButtonTitle)
-                        .foregroundColor(.primary)
+                StablePaneHeaderControls(
+                    showHelpButton: true,
+                    helpButtonTitle: helpButtonTitle,
+                    onHelp: onHelp,
+                    showConfigButton: true,
+                    configButtonTitle: configButtonTitle,
+                    onConfig: onConfig,
+                    reserveConfigSlot: false,
+                    showZoomButton: false,
+                    reserveZoomSlot: true,
+                    isZoomed: false,
+                    onToggleZoom: {}
+                )
+            }
+            .padding(.bottom, 10)
+
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("每次打开几个链接")
+                        .font(.system(size: 13, weight: .semibold))
+
+                    Text("到达这个数量后暂停，按回车继续下一批。")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+
+                    TextField("10", value: $batchSize, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 200)
                 }
-                .buttonStyle(.borderless)
+                .configBlock()
 
-                Button(action: onConfig) {
-                    Text(configButtonTitle)
-                        .fontWeight(configButtonTitle == "保存" ? .bold : .regular)
-                        .foregroundColor(configButtonTitle == "保存" ? .accentColor : .primary)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("链接去重")
+                        .font(.system(size: 13, weight: .semibold))
+
+                    Toggle("打开前先去掉重复链接", isOn: $dedupeLinks)
+                        .toggleStyle(.checkbox)
+                        .font(.system(size: 12))
                 }
-                .buttonStyle(.borderless)
+                .configBlock()
+
+                Spacer()
             }
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("每次打开几个链接")
-                    .font(.system(size: 13, weight: .semibold))
-
-                Text("到达这个数量后暂停，按回车继续下一批。")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-
-                TextField("10", value: $batchSize, format: .number)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-            }
-            .configBlock()
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("链接去重")
-                    .font(.system(size: 13, weight: .semibold))
-
-                Toggle("打开前先去掉重复链接", isOn: $dedupeLinks)
-                    .toggleStyle(.checkbox)
-                    .font(.system(size: 12))
-            }
-            .configBlock()
-
-            Spacer()
+            .padding(.horizontal, 16)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
@@ -154,6 +211,8 @@ struct CopyableHelpPane: View {
     let title: String
     let text: String
     let helpButtonTitle: String
+    let reserveConfigSlot: Bool
+    let reserveZoomSlot: Bool
     let isZoomed: Bool
     let onHelp: () -> Void
     let onToggleZoom: () -> Void
@@ -248,13 +307,19 @@ struct CopyableHelpPane: View {
 
             Spacer()
 
-            Button(action: onHelp) {
-                Text(helpButtonTitle)
-                    .fontWeight(helpButtonTitle == "关闭" ? .bold : .regular)
-                    .foregroundColor(helpButtonTitle == "关闭" ? .accentColor : .primary)
-            }
-            .buttonStyle(.borderless)
-
+            StablePaneHeaderControls(
+                showHelpButton: true,
+                helpButtonTitle: helpButtonTitle,
+                onHelp: onHelp,
+                showConfigButton: false,
+                configButtonTitle: "",
+                onConfig: {},
+                reserveConfigSlot: reserveConfigSlot,
+                showZoomButton: false,
+                reserveZoomSlot: reserveZoomSlot,
+                isZoomed: isZoomed,
+                onToggleZoom: onToggleZoom
+            )
         }
         .padding(.bottom, 10)
     }

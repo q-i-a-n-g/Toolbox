@@ -125,10 +125,12 @@ end try
     _start_focus_command(["/usr/bin/osascript", "-e", script], wait_seconds=0)
 
 
-def close_browser_context_and_focus(browser_context, timing_start=None):
+def close_browser_context_and_focus(browser_context, timing_start=None, after_initial_focus=None):
     focus_toolbox_app()
     if timing_start is not None:
         debug_timing(timing_start, "已请求回到Toolbox")
+    if after_initial_focus is not None:
+        after_initial_focus()
     try:
         browser_context.close()
     finally:
@@ -326,7 +328,7 @@ def auto_download_files(url1, url2, download_dir, label_width):
         return False
     if not os.path.exists(user_data_dir): os.makedirs(user_data_dir, exist_ok=True)
 
-    print("\n...下载更新 数据源表...")
+    print("\n...下载表格...")
     sys.stdout.flush()
     
     try:
@@ -481,8 +483,7 @@ def auto_download_files(url1, url2, download_dir, label_width):
                 process_link(url1, is_card=False)
             if url2:
                 process_link(url2, is_card=True)
-            close_browser_context_and_focus(browser_context, timing_start)
-            print("")
+            close_browser_context_and_focus(browser_context, timing_start, print_processing_status)
             return True
     except Exception as e:
         print(f"\n错误：自动下载失败：{e}")
@@ -492,6 +493,11 @@ def auto_download_files(url1, url2, download_dir, label_width):
 
 
 # ── 主流程 ────────────────────────────────────────────────────────────────
+def print_processing_status():
+    print("\n...正在处理...\n")
+    sys.stdout.flush()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-files", nargs='+', default=[])
