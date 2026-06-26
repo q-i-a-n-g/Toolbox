@@ -209,8 +209,10 @@ end try
     _start_focus_command(["/usr/bin/osascript", "-e", script], wait_seconds=0)
 
 
-def close_browser_context_and_focus(browser_context):
+def close_browser_context_and_focus(browser_context, after_initial_focus=None):
     focus_toolbox_app()
+    if after_initial_focus is not None:
+        after_initial_focus()
     try:
         browser_context.close()
     finally:
@@ -554,7 +556,7 @@ def _download_one_table(
     return False
 
 
-def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: str) -> tuple[bool, bool]:
+def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: str, after_download=None) -> tuple[bool, bool]:
     user_data_dir = os.path.expanduser("~/.gemini/NewApp_chrome_profile")
     chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     if sync_playwright is None:
@@ -591,7 +593,10 @@ def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: s
                 "答题卡",
                 create_time_range=task_create_time_range(date.today()),
             )
-            close_browser_context_and_focus(browser_context)
+            close_browser_context_and_focus(
+                browser_context,
+                after_initial_focus=lambda: after_download(ok1, ok2) if after_download is not None else None,
+            )
             return ok1, ok2
     except Exception as e:
         print(f"E002：自动下载过程异常 ({e})")
@@ -1488,6 +1493,34 @@ def main() -> int:
         print("E004：OCR识别 - 无有效报名数量"); return 1
     print(f"[确认] 报名结果已确认：{len(signup)} 人")
 
+    method, mode = os.environ.get("DAILY_ASSIGN_METHOD", "page"), os.environ.get("DAILY_ASSIGN_MODE", "independent")
+    mode_title = "AI+答题卡" if mode == "linked" else "AI、答题卡"
+    download_status_emitted = False
+    distribution_start_emitted = False
+
+    def emit_download_status(ok_ai: bool, ok_card: bool) -> None:
+        nonlocal download_status_emitted
+        if download_status_emitted:
+            return
+        if not ok_ai:
+            print("\n👉 今天没有AI or 下载失败")
+        if not ok_card:
+            print("\n👉 今天没有答题卡 or 下载失败")
+        sys.stdout.flush()
+        download_status_emitted = True
+
+    def emit_distribution_start() -> None:
+        nonlocal distribution_start_emitted
+        if distribution_start_emitted:
+            return
+        print(f"\n[分配] 开始分配 [{mode_title}] ...")
+        sys.stdout.flush()
+        distribution_start_emitted = True
+
+    def emit_download_status_and_distribution_start(ok_ai: bool, ok_card: bool) -> None:
+        emit_download_status(ok_ai, ok_card)
+        emit_distribution_start()
+
     dl_dir = Path(os.environ.get("DOWNLOAD_DIR", str(Path.home() / "Downloads")))
     dl_dir.mkdir(parents=True, exist_ok=True)
     if ai is None and card is None:
@@ -1503,17 +1536,18 @@ def main() -> int:
         if mode == "mock":
             ok_ai, ok_card = mock_download(ai_path, card_path)
         elif mode == "real":
-            ok_ai, ok_card = real_download(ai_path, card_path, ai_task_name(date.today()), card_task_name(date.today()))
-        if not ok_ai:
-            print("\n👉 今天没有AI or 下载失败")
-        if not ok_card:
-            print("\n👉 今天没有答题卡 or 下载失败")
+            ok_ai, ok_card = real_download(
+                ai_path,
+                card_path,
+                ai_task_name(date.today()),
+                card_task_name(date.today()),
+                after_download=emit_download_status_and_distribution_start,
+            )
+        emit_download_status(ok_ai, ok_card)
         ai = ai_path if ok_ai else None
         card = card_path if ok_card else None
     
-    method, mode = os.environ.get("DAILY_ASSIGN_METHOD", "page"), os.environ.get("DAILY_ASSIGN_MODE", "independent")
-    mode_title = "AI+答题卡" if mode == "linked" else "AI、答题卡"
-    print(f"\n[分配] 开始分配 [{mode_title}] ...")
+    emit_distribution_start()
 
     ai_cap, card_cap = int(os.environ.get("DAILY_ASSIGN_AI_MAX", "200")), int(os.environ.get("DAILY_ASSIGN_CARD_MAX", "300"))
     ai_headers = ["任务名称", "子任务顺序", "任务ID", "子任务ID", "线上学生作业ID", "老师作业ID", "题单ID", "未测评页数", "总页数", "总评测数量", "任务链接"]
