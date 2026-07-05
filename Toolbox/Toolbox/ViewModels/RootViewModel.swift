@@ -1075,6 +1075,7 @@ final class RootViewModel: ObservableObject {
                     dailyAssignRows = parsed
                     dailyAssignPreviewRowsBackup = parsed
                     dailyAssignStage = .confirming
+                    isDailyAssignConfirmPaneZoomed = true
                 }
             } else {
                 kept.append(line)
