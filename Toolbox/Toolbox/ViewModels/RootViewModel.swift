@@ -497,6 +497,8 @@ final class RootViewModel: ObservableObject {
                 .joined(separator: "|")
             extraEnv["DAILY_ASSIGN_FILES"] = filesPath
             extraEnv["DAILY_ASSIGN_METHOD"] = dailyAssignSettings.allocationMethod
+            extraEnv["DAILY_ASSIGN_ENABLE_AI"] = dailyAssignSettings.isAIEnabled ? "1" : "0"
+            extraEnv["DAILY_ASSIGN_ENABLE_CARD"] = dailyAssignSettings.isCardEnabled ? "1" : "0"
             extraEnv["DAILY_ASSIGN_AI_MAX"] = "\(aiMax)"
             extraEnv["DAILY_ASSIGN_CARD_MAX"] = "\(cardMax)"
             extraEnv["DAILY_ASSIGN_MODE"] = dailyAssignSettings.allocationMode

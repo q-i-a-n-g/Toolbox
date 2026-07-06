@@ -160,17 +160,24 @@ def classify(files: list[Path]):
     return shots, ai, card
 
 
-def mock_download(ai_target: Path, card_target: Path) -> tuple[bool, bool]:
+def env_flag(name: str, default: bool) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    if value == "":
+        return default
+    return value not in {"0", "false", "no", "off"}
+
+
+def mock_download(ai_target: Path, card_target: Path, download_ai: bool = True, download_card: bool = True) -> tuple[bool, bool]:
     ai_src = os.environ.get("DAILY_ASSIGN_MOCK_AI_SOURCE", "").strip()
     card_src = os.environ.get("DAILY_ASSIGN_MOCK_CARD_SOURCE", "").strip()
     ok_ai = False
     ok_card = False
-    if ai_src:
+    if download_ai and ai_src:
         ai_s = Path(ai_src)
         if ai_s.exists():
             shutil.copy2(ai_s, ai_target)
             ok_ai = True
-    if card_src:
+    if download_card and card_src:
         card_s = Path(card_src)
         if card_s.exists():
             shutil.copy2(card_s, card_target)
@@ -265,15 +272,7 @@ def _query_visible_task_names(page) -> List[str]:
 
 
 def _take_screenshot(page, name: str, announce: bool = True):
-    try:
-        download_dir = Path(os.environ.get("DOWNLOAD_DIR", str(Path.home() / "Downloads")))
-        path = download_dir / f"{name}_{int(time.time())}.png"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(path))
-        if announce:
-            print(f"[截图] 已保存: {path}")
-    except Exception as e:
-        print(f"[截图] 失败: {e}")
+    return
 
 
 SUBJECT_SUFFIX_RE = re.compile(r"(小学|初中|高中)(语文|数学|英语|物理|化学|生物|科学|历史|地理|政治|道德与法治)$")
@@ -556,7 +555,15 @@ def _download_one_table(
     return False
 
 
-def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: str, after_download=None) -> tuple[bool, bool]:
+def real_download(
+    ai_target: Path,
+    card_target: Path,
+    ai_task: str,
+    card_task: str,
+    after_download=None,
+    download_ai: bool = True,
+    download_card: bool = True,
+) -> tuple[bool, bool]:
     user_data_dir = os.path.expanduser("~/.gemini/NewApp_chrome_profile")
     chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     if sync_playwright is None:
@@ -576,23 +583,27 @@ def real_download(ai_target: Path, card_target: Path, ai_task: str, card_task: s
             )
             page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
 
-            ok1 = _download_one_table(
-                page,
-                "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage",
-                ai_task,
-                ai_target,
-                "AI",
-                create_time_range=task_create_time_range(date.today()),
-                require_subject_suffix=True,
-            )
-            ok2 = _download_one_table(
-                page,
-                "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card",
-                card_task,
-                card_target,
-                "答题卡",
-                create_time_range=task_create_time_range(date.today()),
-            )
+            ok1 = False
+            ok2 = False
+            if download_ai:
+                ok1 = _download_one_table(
+                    page,
+                    "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/holepage",
+                    ai_task,
+                    ai_target,
+                    "AI",
+                    create_time_range=task_create_time_range(date.today()),
+                    require_subject_suffix=True,
+                )
+            if download_card:
+                ok2 = _download_one_table(
+                    page,
+                    "https://mapi.yuanfudao.com/evaluation/#/admin/evaluation/card",
+                    card_task,
+                    card_target,
+                    "答题卡",
+                    create_time_range=task_create_time_range(date.today()),
+                )
             close_browser_context_and_focus(
                 browser_context,
                 after_initial_focus=lambda: after_download(ok1, ok2) if after_download is not None else None,
@@ -826,7 +837,7 @@ def load_signup_texts(shots: List[Path]) -> List[str]:
 
     done = 0
     if len(missing) > 1:
-        print(f"[识别] 共 {len(missing)} 张截图需要OCR，并行处理 {worker_count} 张...", flush=True)
+        print(f"[识别] 共 {len(missing)} 张截图需要OCR，正在处理...", flush=True)
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = {executor.submit(run_vision_ocr, shot): (idx, shot) for idx, shot in missing}
         for future in as_completed(futures):
@@ -1468,6 +1479,12 @@ def main() -> int:
     except: pass
     files = split_files(os.environ.get("DAILY_ASSIGN_FILES", ""))
     shots, ai, card = classify(files)
+    enable_ai = env_flag("DAILY_ASSIGN_ENABLE_AI", True)
+    enable_card = env_flag("DAILY_ASSIGN_ENABLE_CARD", False)
+    if not enable_ai:
+        ai = None
+    if not enable_card:
+        card = None
     uploaded_source_files = ai is not None or card is not None
     if not shots:
         print("E001：未检测到 有效 报名截图"); return 1
@@ -1493,8 +1510,19 @@ def main() -> int:
         print("E004：OCR识别 - 无有效报名数量"); return 1
     print(f"[确认] 报名结果已确认：{len(signup)} 人")
 
-    method, mode = os.environ.get("DAILY_ASSIGN_METHOD", "page"), os.environ.get("DAILY_ASSIGN_MODE", "independent")
-    mode_title = "AI+答题卡" if mode == "linked" else "AI、答题卡"
+    method = os.environ.get("DAILY_ASSIGN_METHOD", "page")
+    allocation_mode = os.environ.get("DAILY_ASSIGN_MODE", "independent")
+
+    def enabled_mode_title() -> str:
+        if enable_ai and enable_card:
+            return "AI+答题卡" if allocation_mode == "linked" else "AI、答题卡"
+        if enable_ai:
+            return "AI"
+        if enable_card:
+            return "答题卡"
+        return "未选择"
+
+    mode_title = enabled_mode_title()
     download_status_emitted = False
     distribution_start_emitted = False
 
@@ -1502,10 +1530,10 @@ def main() -> int:
         nonlocal download_status_emitted
         if download_status_emitted:
             return
-        if not ok_ai:
-            print("\n👉 今天没有AI or 下载失败")
-        if not ok_card:
-            print("\n👉 今天没有答题卡 or 下载失败")
+        if enable_ai and not ok_ai:
+            print("\n👉 今天没有AI")
+        if enable_card and not ok_card:
+            print("\n👉 今天没有答题卡")
         sys.stdout.flush()
         download_status_emitted = True
 
@@ -1523,25 +1551,29 @@ def main() -> int:
 
     dl_dir = Path(os.environ.get("DOWNLOAD_DIR", str(Path.home() / "Downloads")))
     dl_dir.mkdir(parents=True, exist_ok=True)
-    if ai is None and card is None:
+    if ai is None and card is None and (enable_ai or enable_card):
         print("[下载] 检测到仅上传截图，开始自动下载今日任务表...")
         ai_start, ai_end = task_create_time_range(date.today())
-        print(f"[下载] AI任务名: {ai_task_name(date.today())}")
-        print(f"[下载] AI创建时间: {ai_start}、{ai_end}")
-        print(f"[下载] 答题卡任务名: {card_task_name(date.today())}")
-        print(f"[下载] 答题卡创建时间: {ai_start}、{ai_end}")
+        if enable_ai:
+            print(f"[下载] AI任务名: {ai_task_name(date.today())}")
+            print(f"[下载] AI创建时间: {ai_start}、{ai_end}")
+        if enable_card:
+            print(f"[下载] 答题卡任务名: {card_task_name(date.today())}")
+            print(f"[下载] 答题卡创建时间: {ai_start}、{ai_end}")
         ai_path, card_path = dl_dir / "AI_待分配.xlsx", dl_dir / "答题卡_待分配.xlsx"
-        mode = os.environ.get("DAILY_ASSIGN_DOWNLOAD_MODE", "disabled").strip().lower()
+        download_mode = os.environ.get("DAILY_ASSIGN_DOWNLOAD_MODE", "disabled").strip().lower()
         ok_ai, ok_card = False, False
-        if mode == "mock":
-            ok_ai, ok_card = mock_download(ai_path, card_path)
-        elif mode == "real":
+        if download_mode == "mock":
+            ok_ai, ok_card = mock_download(ai_path, card_path, download_ai=enable_ai, download_card=enable_card)
+        elif download_mode == "real":
             ok_ai, ok_card = real_download(
                 ai_path,
                 card_path,
                 ai_task_name(date.today()),
                 card_task_name(date.today()),
                 after_download=emit_download_status_and_distribution_start,
+                download_ai=enable_ai,
+                download_card=enable_card,
             )
         emit_download_status(ok_ai, ok_card)
         ai = ai_path if ok_ai else None
@@ -1560,14 +1592,14 @@ def main() -> int:
     if not ai_tasks and not card_tasks:
         print("E002：没有可分配的 AI 或 答题卡任务表")
         return 1
-    if mode == "linked":
+    if allocation_mode == "linked":
         ai_signup, card_signup = split_signup_for_linked_mode(ai_tasks, card_tasks, signup, method, signup_order)
         if ai_tasks: ai_rows, _ = assign(ai_tasks, ai_signup, method, name_order=signup_order)
         if card_tasks: card_rows, _ = assign(card_tasks, card_signup, method, name_order=signup_order)
     else:
         if ai_tasks: ai_rows, _ = assign(ai_tasks, signup, method, name_order=signup_order)
         if card_tasks: card_rows, _ = assign(card_tasks, signup, method, name_order=signup_order)
-    checker_assignments, sheet_page_totals, checker_totals = plan_checker_assignments(ai_rows, card_rows, mode)
+    checker_assignments, sheet_page_totals, checker_totals = plan_checker_assignments(ai_rows, card_rows, allocation_mode)
     output_dir = Path(os.environ.get("OUTPUT_DIR", str(Path.cwd())))
     output, tmp = output_dir / "分配表.xlsx", (output_dir / "分配表.xlsx").with_suffix(".tmp.xlsx")
     try:

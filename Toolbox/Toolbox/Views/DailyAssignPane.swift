@@ -9,7 +9,9 @@ func activateToolboxWindowAfterDrop() {
 
 struct DailyAssignSettings {
     var allocationMethod: String = "page"
+    var isAIEnabled: Bool = true
     var aiMaxPages: Int = 200
+    var isCardEnabled: Bool = false
     var cardMaxPages: Int = 300
     var allocationMode: String = "independent"
 }
@@ -72,33 +74,52 @@ struct DailyAssignPane: View {
                     Spacer().frame(width: 20)
 
                     VStack(alignment: .leading, spacing: 16) {
-                        HStack(spacing: 12) {
-                            Text("AI最多可分配页数")
-                                .foregroundColor(.secondary)
-                                .font(.system(size: 13, weight: .medium))
-                            Spacer()
-                            TextField("200", value: $settings.aiMaxPages, format: .number)
-                                .textFieldStyle(.roundedBorder)
-                                .font(.system(size: 13))
-                                .frame(width: 56)
-                                .multilineTextAlignment(.center)
+                        HStack(spacing: 8) {
+                            Toggle("", isOn: $settings.isAIEnabled)
+                                .toggleStyle(.checkbox)
+                                .labelsHidden()
+                                .frame(width: 18)
+
+                            HStack(spacing: 12) {
+                                Text("AI最多可分配页数")
+                                    .foregroundColor(settings.isAIEnabled ? .secondary : .secondary.opacity(0.55))
+                                    .font(.system(size: 13, weight: .medium))
+                                Spacer()
+                                TextField("200", value: $settings.aiMaxPages, format: .number)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(size: 13))
+                                    .frame(width: 56)
+                                    .multilineTextAlignment(.center)
+                                    .disabled(!settings.isAIEnabled)
+                                    .opacity(settings.isAIEnabled ? 1 : 0.45)
+                            }
                         }
                         .frame(width: 240)
 
-                        HStack(spacing: 12) {
-                            Text("答题卡最多可分配页数")
-                                .foregroundColor(.secondary)
-                                .font(.system(size: 13, weight: .medium))
-                            Spacer()
-                            TextField("300", value: $settings.cardMaxPages, format: .number)
-                                .textFieldStyle(.roundedBorder)
-                                .font(.system(size: 13))
-                                .frame(width: 56)
-                                .multilineTextAlignment(.center)
+                        HStack(spacing: 8) {
+                            Toggle("", isOn: $settings.isCardEnabled)
+                                .toggleStyle(.checkbox)
+                                .labelsHidden()
+                                .frame(width: 18)
+
+                            HStack(spacing: 12) {
+                                Text("答题卡最多可分配页数")
+                                    .foregroundColor(settings.isCardEnabled ? .secondary : .secondary.opacity(0.55))
+                                    .font(.system(size: 13, weight: .medium))
+                                Spacer()
+                                TextField("300", value: $settings.cardMaxPages, format: .number)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(size: 13))
+                                    .frame(width: 56)
+                                    .multilineTextAlignment(.center)
+                                    .disabled(!settings.isCardEnabled)
+                                    .opacity(settings.isCardEnabled ? 1 : 0.45)
+                            }
                         }
                         .frame(width: 240)
                     }
                 }
+                .offset(x: -36)
                 .padding(.vertical, 20)
             }
             .frame(maxWidth: .infinity)
