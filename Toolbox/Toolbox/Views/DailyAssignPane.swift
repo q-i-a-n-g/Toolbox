@@ -32,6 +32,10 @@ struct DailyAssignPane: View {
 
     @State private var draggingRowID: UUID?
 
+    private var canChooseAllocationMode: Bool {
+        settings.isAIEnabled && settings.isCardEnabled
+    }
+
     var body: some View {
         VStack(spacing: 10) {
             if stage == .confirming {
@@ -67,6 +71,8 @@ struct DailyAssignPane: View {
                         .pickerStyle(.segmented)
                         .labelsHidden()
                         .frame(width: 300)
+                        .disabled(!canChooseAllocationMode)
+                        .opacity(canChooseAllocationMode ? 1 : 0.45)
                     }
 
                     Spacer().frame(width: 20)
@@ -131,6 +137,18 @@ struct DailyAssignPane: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.white.opacity(0.1), lineWidth: 1)
             )
+            .onChange(of: settings.isAIEnabled) { _ in
+                normalizeAllocationModeAvailability()
+            }
+            .onChange(of: settings.isCardEnabled) { _ in
+                normalizeAllocationModeAvailability()
+            }
+        }
+    }
+
+    private func normalizeAllocationModeAvailability() {
+        if !canChooseAllocationMode {
+            settings.allocationMode = "independent"
         }
     }
 

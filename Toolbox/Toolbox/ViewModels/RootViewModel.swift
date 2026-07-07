@@ -492,6 +492,9 @@ final class RootViewModel: ObservableObject {
             let filesPath = dailyAssignFiles.map { $0.path }.joined(separator: "|")
             let aiMax = min(max(1, dailyAssignSettings.aiMaxPages), 20_000)
             let cardMax = min(max(1, dailyAssignSettings.cardMaxPages), 20_000)
+            let allocationMode = dailyAssignSettings.isAIEnabled && dailyAssignSettings.isCardEnabled
+                ? dailyAssignSettings.allocationMode
+                : "independent"
             let confirmedSignup = dailyAssignRows
                 .map { "\($0.name):\($0.count)" }
                 .joined(separator: "|")
@@ -501,7 +504,7 @@ final class RootViewModel: ObservableObject {
             extraEnv["DAILY_ASSIGN_ENABLE_CARD"] = dailyAssignSettings.isCardEnabled ? "1" : "0"
             extraEnv["DAILY_ASSIGN_AI_MAX"] = "\(aiMax)"
             extraEnv["DAILY_ASSIGN_CARD_MAX"] = "\(cardMax)"
-            extraEnv["DAILY_ASSIGN_MODE"] = dailyAssignSettings.allocationMode
+            extraEnv["DAILY_ASSIGN_MODE"] = allocationMode
             extraEnv["DAILY_ASSIGN_DOWNLOAD_MODE"] = "real"
             extraEnv["DAILY_ASSIGN_PREVIEW_ONLY"] = "0"
             extraEnv["DAILY_ASSIGN_CONFIRMED_SIGNUP"] = confirmedSignup
