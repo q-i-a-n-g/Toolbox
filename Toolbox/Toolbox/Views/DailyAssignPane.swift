@@ -90,6 +90,9 @@ struct DailyAssignPane: View {
                                 Text("AI最多可分配页数")
                                     .foregroundColor(settings.isAIEnabled ? .secondary : .secondary.opacity(0.55))
                                     .font(.system(size: 13, weight: .medium))
+                                    .onTapGesture {
+                                        settings.isAIEnabled.toggle()
+                                    }
                                 Spacer()
                                 TextField("200", value: $settings.aiMaxPages, format: .number)
                                     .textFieldStyle(.roundedBorder)
@@ -112,6 +115,9 @@ struct DailyAssignPane: View {
                                 Text("答题卡最多可分配页数")
                                     .foregroundColor(settings.isCardEnabled ? .secondary : .secondary.opacity(0.55))
                                     .font(.system(size: 13, weight: .medium))
+                                    .onTapGesture {
+                                        settings.isCardEnabled.toggle()
+                                    }
                                 Spacer()
                                 TextField("300", value: $settings.cardMaxPages, format: .number)
                                     .textFieldStyle(.roundedBorder)
